@@ -1,0 +1,9 @@
+certifi==2021.5.30
+charset-normalizer==2.0.6
+idna==3.2
+pywikibot==6.6.1
+regex==2021.9.30
+requests==2.26.0
+urllib3==1.26.7
+wcwidth==0.2.5
+wikitextparser==0.47.5

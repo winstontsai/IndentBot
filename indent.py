@@ -83,19 +83,19 @@ def make_fixes(text):
             bad_spans.append(x.span)
 
     for x in wikitext.templates:
-        if '\n' in str(x):
+        if wikitext.string[:x.span[0]].endswith('\n'):
+            bad_spans.append( (x.span[0]-1, x.span[1]) )
+        elif '\n' in str(x):
             bad_spans.append(x.span)
 
     for x in wikitext.get_tags():
-        if '\n' in str(x):
+        if wikitext.string[:x.span[0]].endswith('\n'):
+            bad_spans.append( (x.span[0]-1, x.span[1]) )
+        elif '\n' in str(x):
             bad_spans.append(x.span)
 
-
     def in_bad_span(i):
-        for start, end in bad_spans:
-            if start <= i < end:
-                return True
-        return False
+        return any(start<=i<end for start, end in bad_spans)
 
     borders = [0]
     for i in range(1, len(text)):
@@ -108,6 +108,8 @@ def make_fixes(text):
     for i in range(len(borders) - 1):
         lines.append(text[borders[i] : borders[i + 1]])
 
+    #print(lines)
+
     lines = fix_gaps(lines, single_only = True, squish=True)
     lines = fix_indent_style(lines)
     lines = fix_extra_indents(lines)
@@ -117,7 +119,7 @@ def make_fixes(text):
 
 if __name__ == "__main__":
     site = pwb.Site('en', 'wikipedia')
-    site.login(user='Notsniwiast')
+    site.login()
 
     title = sys.argv[1]
     page = pwb.Page(site, title)

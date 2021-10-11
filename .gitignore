@@ -1,0 +1,5 @@
+.DS_Store
+apicache-py3/
+env/
+pywikibot.lwp
+throttle.ctrl

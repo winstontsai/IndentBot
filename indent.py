@@ -9,10 +9,13 @@ def is_blank_line(line):
     return bool(re.fullmatch(r'\s+', line))
 
 def indent_text(line):
-    return re.match(r'[:*]*', line)[0]
+    return re.match(r'[:*#]*', line)[0]
 
 def indent_lvl(line):
     return len(indent_text(line))
+
+def line_content(line):
+    return line[indent_lvl(line):]
 
 def fix_gaps(lines, single_only = True, squish=True):
     """
@@ -41,21 +44,6 @@ def fix_gaps(lines, single_only = True, squish=True):
             i += 1
     return [x for x in lines if x != DELETE_MARKER]
 
-def fix_indent_style(lines):
-    """
-    Do not mix indent styles. This function iterates over
-    pairs of lines (say, A and B) from beginning to end, and
-    ensures that either indent_text(A) prefixes B or that
-    indent_text(B) prefixes A by modifying the indent text of line B
-    without changing its indent level.
-    """
-    new_lines = [lines[0]]
-    for i in range(0, len(lines)-1):
-        x, y = indent_lvl(new_lines[i]), indent_lvl(lines[i+1])
-        z = min(x, y)
-        new_lines.append(new_lines[i][:z] + lines[i+1][z:])
-    return new_lines
-
 def fix_extra_indents(lines):
     """
     Fix extra indentation.
@@ -71,8 +59,32 @@ def fix_extra_indents(lines):
             z = indent_lvl(lines[j])
             if z < y:
                 break
-            lines[j] = lines[j][:z-difference+1] + lines[j][z:]
+            lines[j] = lines[j][:z-(difference-1)] + line_content(lines[j]) # chop off end
+            #lines[j] = lines[j][difference-1:]     # chop off start
     return lines
+
+def fix_indent_style(lines):
+    """
+    Do not mix indent styles. This function iterates over
+    pairs of lines (say, A and B) from beginning to end, and
+    ensures that either indent_text(A) prefixes B or that
+    indent_text(B) prefixes A by modifying the indent text of line B
+    without changing its indent level.
+    """
+    new_lines = [lines[0]]     # we assume lines is nonempty
+    previous_lvl = indent_lvl(lines[0])
+    indent_dict = {previous_lvl: indent_text(lines[0])}
+
+    for i, line in enumerate(lines[1:], start=1):
+        lvl = indent_lvl(line)
+        if lvl > previous_lvl:
+            new_lines.append(new_lines[i-1][:previous_lvl] + line[previous_lvl:])
+        else:
+            new_lines.append(indent_dict[lvl] + line_content(line))
+        indent_dict[lvl] = indent_text(new_lines[-1]) # record indentation style for this lvl
+        previous_lvl = lvl
+    return new_lines
+
 
 def make_fixes(text):
     wikitext = wtp.parse(text)
@@ -110,22 +122,24 @@ def make_fixes(text):
 
     #print(lines)
 
+    # The order of these fixes is important.
+    # Currently, fix_indent_style relies correct indentation levels.
     lines = fix_gaps(lines, single_only = True, squish=True)
-    lines = fix_indent_style(lines)
     lines = fix_extra_indents(lines)
+    lines = fix_indent_style(lines)
     return ''.join(lines)
 
 
 
 if __name__ == "__main__":
     site = pwb.Site('en', 'wikipedia')
-    site.login()
+    site.login('IndentBot')
 
     title = sys.argv[1]
     page = pwb.Page(site, title)
+
     original_text = page.text
     page.text = make_fixes(original_text)
-
     if page.text != original_text:
         page.save(summary='Adjusting indentation. Test.', minor=True)
 

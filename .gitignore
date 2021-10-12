@@ -3,3 +3,4 @@ apicache-py3/
 env/
 pywikibot.lwp
 throttle.ctrl
+user-config.py

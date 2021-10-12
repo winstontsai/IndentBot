@@ -25,8 +25,7 @@ def fix_gaps(lines, single_only = True, squish=True):
 
     Set squish to True to REMOVE blank lines preceding a line with indent_lvl 1.
     """
-    n = len(lines)
-    lines = list(lines)
+    lines, n = list(lines), len(lines)
     DELETE_MARKER = 'gonna delete this lineeeeeeeeeeeeeeeeee'
     i = 0
     while i < n:
@@ -49,27 +48,28 @@ def fix_extra_indents(lines):
     Fix extra indentation.
     """
     lines = list(lines)
+    # fix first line
+    if indent_lvl(lines[0]) > 1:
+        lines[0] = lines[0][0] + line_content(lines[0])
+    # fix rest of lines
     for i in range(len(lines) - 1):
         x = indent_lvl(lines[i])
         y = indent_lvl(lines[i+1])
         if y <= x + 1:
             continue
-        difference = y - x
+        to_remove = y - x - 1
         for j in range(i + 1, len(lines)):
             z = indent_lvl(lines[j])
             if z < y:
                 break
-            lines[j] = lines[j][:z-(difference-1)] + line_content(lines[j]) # chop off end
-            #lines[j] = lines[j][difference-1:]     # chop off start
+            lines[j] = lines[j][:z - to_remove] + line_content(lines[j]) # chop off end
+            #lines[j] = lines[j][to_remove:]     # chop off start
     return lines
 
 def fix_indent_style(lines):
     """
-    Do not mix indent styles. This function iterates over
-    pairs of lines (say, A and B) from beginning to end, and
-    ensures that either indent_text(A) prefixes B or that
-    indent_text(B) prefixes A by modifying the indent text of line B
-    without changing its indent level.
+    Do not mix indent styles. Each line's indentation style must match
+    the most recently used indentation style.
     """
     new_lines = [lines[0]]     # we assume lines is nonempty
     previous_lvl = indent_lvl(lines[0])
@@ -88,7 +88,6 @@ def fix_indent_style(lines):
 
 def make_fixes(text):
     wikitext = wtp.parse(text)
-
     bad_spans = []
     for x in wikitext.comments:
         if '\n' in str(x):
@@ -106,20 +105,18 @@ def make_fixes(text):
         elif '\n' in str(x):
             bad_spans.append(x.span)
 
-    def in_bad_span(i):
-        return any(start<=i<end for start, end in bad_spans)
+    def not_in_bad_span(i):
+        return not any(start<=i<end for start, end in bad_spans)
 
     borders = [0]
     for i in range(1, len(text)):
-        if text[i] == '\n' and not in_bad_span(i):
+        if text[i] == '\n' and not_in_bad_span(i):
             borders.append(i + 1)
-    if borders[-1] != len(text):
-        borders.append(len(text))
+    borders.append(len(text))
 
     lines = []
     for i in range(len(borders) - 1):
         lines.append(text[borders[i] : borders[i + 1]])
-
     #print(lines)
 
     # The order of these fixes is important.
@@ -128,7 +125,6 @@ def make_fixes(text):
     lines = fix_extra_indents(lines)
     lines = fix_indent_style(lines)
     return ''.join(lines)
-
 
 
 if __name__ == "__main__":

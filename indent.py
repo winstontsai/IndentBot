@@ -139,3 +139,4 @@ if __name__ == "__main__":
     if page.text != original_text:
         page.save(summary='Adjusting indentation. Test.', minor=True)
 
+

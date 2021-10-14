@@ -1,6 +1,8 @@
 .DS_Store
 apicache-py3/
 env/
+__pycache__/
 pywikibot.lwp
 throttle.ctrl
 user-config.py
+play.py

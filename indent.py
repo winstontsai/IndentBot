@@ -2,8 +2,15 @@ import re
 import sys
 import time
 
+from datetime import timedelta
+
 import pywikibot as pwb
 import wikitextparser as wtp
+
+from pywikibot import Page, Site
+from pywikibot.tools import filter_unique
+################################################################################
+SITE = Site('en','wikipedia')
 
 def is_blank_line(line):
     return bool(re.fullmatch(r'\s+', line))
@@ -62,8 +69,8 @@ def fix_extra_indents(lines):
             z = indent_lvl(lines[j])
             if z < y:
                 break
-            lines[j] = lines[j][:z - to_remove] + line_content(lines[j]) # chop off end
-            #lines[j] = lines[j][to_remove:]     # chop off start
+            #lines[j] = lines[j][:z - to_remove] + line_content(lines[j]) # chop off end
+            lines[j] = lines[j][to_remove:]     # chop off start
     return lines
 
 def fix_indent_style(lines):
@@ -126,17 +133,49 @@ def make_fixes(text):
     lines = fix_indent_style(lines)
     return ''.join(lines)
 
-
-if __name__ == "__main__":
-    site = pwb.Site('en', 'wikipedia')
-    site.login('IndentBot')
-
-    title = sys.argv[1]
-    page = pwb.Page(site, title)
-
+def fix_page(title):
+    page = Page(SITE, title)
     original_text = page.text
     page.text = make_fixes(original_text)
     if page.text != original_text:
-        page.save(summary='Adjusting indentation. Test.', minor=True)
+        page.save(summary='Adjusting indentation. Test.', minor=True, nocreate=True)
+
+
+def get_pages_to_check(minutes=10):
+    """
+    Yields talk/discussion pages from between (minutes+5) minutes ago and 5 minutes ago.
+    """
+    start = SITE.server_time() - timedelta(minutes=5)
+    end = start - timedelta(minutes=minutes, seconds=3)
+
+    talk_spaces = [1, 3, 5, 7, 11, 13, 15]
+    other_spaces = [4]
+    prefixes = []
+
+    gen = SITE.recentchanges(start=start, end=end, changetype='edit',
+        namespaces=talk_spaces + other_spaces, 
+        minor=False, bot=False, redirect=False,)
+
+    gen = filter_unique(gen, key=lambda c: c['pageid'])
+
+    for change in gen:
+        title = change['title']
+        ns = change['ns']
+
+        if re.search('sandbox', title, flags=re.I):
+            continue
+        if ns in other_spaces and not any(title.startswith(pre) for pre in prefixes):
+            continue
+
+        yield title
+
+
+def main():
+    for title in get_pages_to_check():
+        fix_page(title)
+
+
+if __name__ == "__main__":
+    main()
 
 

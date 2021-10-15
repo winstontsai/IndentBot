@@ -146,7 +146,9 @@ def has_n_signatures(text, n = 5):
 
 def get_pages_to_check(chunk=10, delay=10):
     """
-    Yields talk/discussion pages edited between 5 and (minutes+5) minutes ago.
+    Yields discussion pages edited between delay and delay+chunk minutes ago
+    which are non-minor, non-bot, non-redirect,
+    and have not had a non-minor, non-bot edit made in the last delay minutes.
     """
     server_time = SITE.server_time()
     start = server_time - timedelta(minutes=delay)
@@ -175,8 +177,11 @@ def get_pages_to_check(chunk=10, delay=10):
     for change in changes:
         title = change['title']
         ns = change['ns']
-        page = Page(SITE, title)
 
+        if re.search(r'/([sS]andbox|[aA]rchive|[lL]og)\b', title):
+            continue
+
+        page = Page(SITE, title)
         if not (ns % 2 or has_n_signatures(page.text, 5)):
             continue
 

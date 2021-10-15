@@ -2,7 +2,8 @@ import re
 import sys
 import time
 
-from datetime import timedelta
+from calendar import month_name
+from datetime import datetime, timedelta
 
 import pywikibot as pwb
 import wikitextparser as wtp
@@ -13,6 +14,21 @@ from pywikibot.tools import filter_unique
 
 SITE = Site('en','wikipedia')
 SITE.login(user='IndentBot')
+
+MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
+SIGNATURE_PATTERN = (
+    r'\[\[[Uu]ser:[^\n]+\[\[[Uu]ser talk:[^\n]+([0-2]\d):([0-5]\d), ([1-3]?\d) '
+    f'({"|".join(month for month in MONTH_TO_INT)}) '
+    r'(2\d{3}) \(UTC\)'
+)
+
+
+def log_error(error):
+    timestring = datetime.utcnow().isoformat()[-7]
+    logfile = '/data/project/indentbot/logs/save_errors'
+    with open(logfile, 'a') as f:
+        print(f'{timestring} {x.page.pageid} [[{x.page.title()}]]: {x}',
+            file=f, flush=True)
 
 def is_blank_line(line):
     return bool(re.fullmatch(r'\s+', line))
@@ -112,23 +128,33 @@ def fix_indent_style(lines, keep_hashes=True):
     return new_lines
 
 ################################################################################
-def has_n_signatures(text, n = 5):
-    pat = (
-        r'\[\[User:[^\n]+\[\[User talk:[^\n]+[0-2]\d:[0-5]\d, [1-3]?\d '
-        r'(January|February|March|April|May|June|July|August|September|October|November|December) '
-        r'2\d{3} \(UTC\)'
-    )
-    return any(i >= n for i, j in enumerate(re.finditer(pat, text), start=1))
+def can_edit(page, n_sigs = 10):
+    title, text = page.title(), page.text
 
-def get_pages_to_check(chunk=10, delay=10):
+    if '<!--NO INDENTBOT' in text:
+        return False
+
+    current_time = datetime.utcnow()
+    delta = timedelta(days=1)
+    has_recent_sig = False
+    for count, m in enumerate(re.finditer(SIGNATURE_PATTERN, text), start=1):
+        if not has_recent_sig:
+            # year, month, day, hour, minute
+            pieces = map(int, [m[5], MONTH_TO_INT[m[4]], m[3], m[1], m[2]])
+            has_recent_sig = current_time - datetime(*pieces) < delta
+        if count >= n_sigs and has_recent_sig:
+            return True
+    return False
+
+def pages_to_check(chunk=10, delay=10):
     """
     Yields discussion pages edited between delay and delay+chunk minutes ago
     which are non-minor, non-bot, non-redirect,
     and have not had a non-minor, non-bot edit made in the last delay minutes.
     """
-    server_time = SITE.server_time()
-    start = server_time - timedelta(minutes=delay)
-    end = start - timedelta(minutes=chunk)
+    current_time = Timestamp.fromISOformat(datetime.utcnow().isoformat()[:-7]+'Z')
+    start_time = current_time - timedelta(minutes=delay)
+    end_time = start_time - timedelta(minutes=chunk, seconds=1)
 
     # 0   (Main/Article)  Talk              1
     # 2   User            User talk         3
@@ -140,28 +166,23 @@ def get_pages_to_check(chunk=10, delay=10):
     # 14  Category        Category talk     15
     talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
     other_spaces = [4]
+    spaces = talk_spaces + other_spaces
+    sandbox_templates = ['Template:Sandbox heading']
 
-    not_latest, changes, start = set(), [], start.isoformat()
-    for x in SITE.recentchanges(start=server_time, end=end, changetype='edit',
-            namespaces=talk_spaces + other_spaces, 
-            minor=False, bot=False, redirect=False,):
-        if x['timestamp'] <= start and x['pageid'] not in not_latest:
-            changes.append(x)  
+    not_latest, start_ts = set(), start_time.isoformat()
+    for x in SITE.recentchanges(start=current_time, end=end_time, changetype='edit',
+            namespaces=spaces, minor=False, bot=False, redirect=False,):
+        if x['timestamp'] <= start_ts and x['pageid'] not in not_latest:
+            title = x['title']
+            ns    = x['ns']
+
+            # if re.search(r'/([sS]andbox|[aA]rchives?|[lL]ogs?)\d*', title):
+            #     continue
+
+            page = Page(SITE, title)
+            if can_edit(page):
+                yield page
         not_latest.add(x['pageid'])
-    print(len(changes))
-
-    for change in changes:
-        title = change['title']
-        ns = change['ns']
-
-        if re.search(r'/([sS]andbox|[aA]rchive|[lL]og)\b', title):
-            continue
-
-        page = Page(SITE, title)
-        if not (ns % 2 or has_n_signatures(page.text, 5)):
-            continue
-
-        yield page
 
 def make_fixes(text):
     wt = wtp.parse(text)
@@ -184,14 +205,13 @@ def make_fixes(text):
             lines.append(text[prev:i + 1])
             prev = i + 1
     lines.append(text[prev:]) # since Wikipedia strips newlines from the end
-    #print(lines)
+    # print(lines)
 
     # The order of these fixes is important.
     #Changing the order can change the effects.
     lines = fix_gaps(lines)
     lines = fix_extra_indents(lines)
     lines = fix_indent_style(lines)
-    
     return ''.join(lines)
 
 def fix_page(page):
@@ -201,23 +221,24 @@ def fix_page(page):
     page.text = make_fixes(original_text)
     if page.text != original_text:
         try:
-            page.save(summary='Adjusting indentation. Test.', minor=True, nocreate=True)
+            page.save(summary='Adjusting indentation. Test edit. See the [[Wikipedia:Bots/Requests for approval/IndentBot|request for approval]].',
+                minor=True, botflag=True, nocreate=True)
             return True
-        except pwb.exceptions.EditConflictError:
-            return False
+        except Exception as e:
+            log_error(e)
     return False
 
 def main(limit = None):
     if limit is None:
         limit = float('inf')
     count = 0
-    for title in get_pages_to_check():
-        count += fix_page(title)
+    for p in pages_to_check():
+        count += fix_page(p)
         if count >= limit:
             break
 
 
 if __name__ == "__main__":
-    main()
-
+    print('main function')
+    #main()
 

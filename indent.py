@@ -57,6 +57,7 @@ def fix_gaps(lines, squish=True, single_only=False):
 
     return [x for x in lines if x]
 
+
 def fix_extra_indents(lines):
     """
     Fix extra indentation.
@@ -72,11 +73,14 @@ def fix_extra_indents(lines):
             z = indent_lvl(lines[j])
             if z < y:
                 break
+            # Do not change lines with '#' as an indent character.
+            if '#' in indent_text(lines[j]):
+                continue
             # lines[j] = lines[j][:z - extra] + lines[j][z:] # chop off end
             lines[j] = lines[j][extra:]     # chop off start
     return lines[1:]
 
-def fix_indent_style(lines):
+def fix_indent_style(lines, keep_hashes=True):
     """
     Do not mix indent styles. Each line's indentation style must match
     the most recently used indentation style.
@@ -89,56 +93,28 @@ def fix_indent_style(lines):
         minlvl = min(lvl, previous_lvl)
     
         closest_min_lvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
-        min_text = indent_dict[closest_min_lvl] + (':' * (minlvl - closest_min_lvl))
-        new_prefix = ''
-        for c1, c2 in zip(min_text, line[:minlvl]):
-            if c2 == '#':
-                new_prefix += c2
-            elif c1 != '#':
-                new_prefix += c1
-            else:
-                new_prefix += c2
+        min_text = indent_dict[closest_min_lvl] + line[closest_min_lvl:minlvl]
+        if keep_hashes:
+            new_prefix = ''
+            for c1, c2 in zip(min_text, line[:minlvl]):
+                if c2 == '#':
+                    new_prefix += c2
+                elif c1 != '#':
+                    new_prefix += c1
+                else:
+                    new_prefix += c2
+        else:
+            new_prefix = min_text
 
         new_lines.append(new_prefix + line[minlvl:])
         indent_dict[lvl] = indent_text(new_lines[-1]) # record style
         previous_lvl = lvl
     return new_lines
 
-def make_fixes(text):
-    wt = wtp.parse(text)
-
-    bad_spans = []
-    for x in wt.comments + wt.tables + wt.templates + wt.get_tags():
-        i, j = x.span
-        if i - 1 >= 0 and text[i - 1] == '\n':
-            i -= 1
-        if '\n' in text[i:j]:
-            bad_spans.append((i, j))
-
-    def not_in_bad_span(i):
-        return not any(start<=i<end for start, end in bad_spans)
-
-    # partition into lines
-    prev, lines = 0, []
-    for i, c in enumerate(text):
-        if c == '\n' and not_in_bad_span(i):
-            lines.append(text[prev:i + 1])
-            prev = i + 1
-    lines.append(text[prev:]) # since Wikipedia strips newlines from the end
-    #print(lines)
-
-    # The order of these fixes is important.
-    #Changing the order can change the effects.
-    lines = fix_gaps(lines)
-    lines = fix_indent_style(lines)
-    lines = fix_extra_indents(lines)
-    return ''.join(lines)
-
-
 ################################################################################
 def has_n_signatures(text, n = 5):
     pat = (
-        r'\[\[User:[^\n]+\[\[User talk:[^\n]+[0-2]\d:[0-5]\d, \d\d? '
+        r'\[\[User:[^\n]+\[\[User talk:[^\n]+[0-2]\d:[0-5]\d, [1-3]?\d '
         r'(January|February|March|April|May|June|July|August|September|October|November|December) '
         r'2\d{3} \(UTC\)'
     )
@@ -186,6 +162,37 @@ def get_pages_to_check(chunk=10, delay=10):
             continue
 
         yield page
+
+def make_fixes(text):
+    wt = wtp.parse(text)
+
+    bad_spans = []
+    for x in wt.comments + wt.tables + wt.templates + wt.get_tags():
+        i, j = x.span
+        if i - 1 >= 0 and text[i - 1] == '\n':
+            i -= 1
+        if '\n' in text[i:j]:
+            bad_spans.append((i, j))
+
+    def not_in_bad_span(i):
+        return not any(start<=i<end for start, end in bad_spans)
+
+    # partition into lines
+    prev, lines = 0, []
+    for i, c in enumerate(text):
+        if c == '\n' and not_in_bad_span(i):
+            lines.append(text[prev:i + 1])
+            prev = i + 1
+    lines.append(text[prev:]) # since Wikipedia strips newlines from the end
+    #print(lines)
+
+    # The order of these fixes is important.
+    #Changing the order can change the effects.
+    lines = fix_gaps(lines)
+    lines = fix_extra_indents(lines)
+    lines = fix_indent_style(lines)
+    
+    return ''.join(lines)
 
 def fix_page(page):
     if type(page) == str:

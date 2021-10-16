@@ -17,9 +17,11 @@ SITE.login(user='IndentBot')
 
 MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
 SIGNATURE_PATTERN = (
-    r'\[\[[Uu]ser:[^\n]+\[\[[Uu]ser talk:[^\n]+([0-2]\d):([0-5]\d), ([1-3]?\d) '
-    f'({"|".join(month for month in MONTH_TO_INT)}) '
-    r'(2\d{3}) \(UTC\)'
+    r'\[\[[Uu]ser[^\n]+?'                     # user page link
+    r'([0-2]\d):([0-5]\d), '                  # hh:mm
+    r'([1-3]?\d) '                            # day
+    f'({"|".join(m for m in MONTH_TO_INT)}) ' # month
+    r'(2\d{3}) \(UTC\)'                       # yyyy
 )
 
 
@@ -121,65 +123,11 @@ def fix_indent_style(lines, keep_hashes=True):
                     new_prefix += c2
         else:
             new_prefix = min_text
-
         new_lines.append(new_prefix + line[minlvl:])
+
         indent_dict[lvl] = indent_text(new_lines[-1]) # record style
         previous_lvl = lvl
     return new_lines
-
-################################################################################
-def can_edit(page, n_sigs):
-    title, text = page.title(), page.text
-
-    if '<!--NO INDENTBOT' in text:
-        return False
-
-    current_time = datetime.utcnow()
-    recent = timedelta(days=1)
-    has_recent_sig = False
-    for count, m in enumerate(re.finditer(SIGNATURE_PATTERN, text), start=1):
-        if not has_recent_sig:
-            # year, month, day, hour, minute
-            pieces = map(int, [m[5], MONTH_TO_INT[m[4]], m[3], m[1], m[2]])
-            has_recent_sig = current_time - datetime(*pieces) < recent
-        if count >= n_sigs and has_recent_sig:
-            return True
-    return False
-
-def pages_to_check(chunk=10, delay=10):
-    """
-    Yields discussion pages edited between delay and delay+chunk minutes ago
-    which are non-minor, non-bot, non-redirect,
-    and have not had a non-minor, non-bot edit made in the last delay minutes.
-    """
-    current_time = Timestamp.fromISOformat(datetime.utcnow().isoformat()[:-7]+'Z')
-    start_time = current_time - timedelta(minutes=delay)
-    end_time = start_time - timedelta(minutes=chunk, seconds=1)
-
-    talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
-    other_spaces = [4]
-    spaces = talk_spaces + other_spaces
-
-    avoid_tags = {'Undo', 'Manual revert'} # not currently used
-
-    not_latest = set()
-    start_ts = start_time.isoformat()
-    for x in SITE.recentchanges(start=current_time, end=end_time, changetype='edit',
-            namespaces=spaces, minor=False, bot=False, redirect=False,):
-
-        # has been superseded by a newer non-minor, non-bot, 
-        # potentially signature-adding edit
-        if x['pageid'] in not_latest:
-            continue
-
-        if x['newlen'] - x['oldlen'] < 50:
-            continue
-
-        if x['timestamp'] <= start_ts:
-            page = Page(SITE, x['title'])
-            if can_edit(page, n_sigs=5):
-                yield page
-        not_latest.add(x['pageid'])
 
 def make_fixes(text):
     wt = wtp.parse(text)
@@ -211,6 +159,56 @@ def make_fixes(text):
     lines = fix_indent_style(lines)
     return ''.join(lines)
 
+################################################################################
+def can_edit(page, n_sigs):
+    title, text = page.title(), page.text
+    current_time = datetime.utcnow()
+    recent = timedelta(days=1)
+    has_recent_sig = False
+    for count, m in enumerate(re.finditer(SIGNATURE_PATTERN, text), start=1):
+        if not has_recent_sig:
+            # year, month, day, hour, minute
+            pieces = map(int, [m[5], MONTH_TO_INT[m[4]], m[3], m[1], m[2]])
+            has_recent_sig = current_time - datetime(*pieces) < recent
+        if count >= n_sigs and has_recent_sig:
+            return True
+    return False
+
+def pages_to_check(chunk=10, delay=10):
+    """
+    Yields discussion pages edited between delay and delay+chunk minutes ago
+    which are non-minor, non-bot, non-redirect,
+    and have not had a non-minor, non-bot edit made in the last delay minutes.
+    """
+    current_time = SITE.server_time()
+    start_time = current_time - timedelta(minutes=delay)
+    end_time = start_time - timedelta(minutes=chunk, seconds=3)
+
+    talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
+    other_spaces = [4]
+    spaces = talk_spaces + other_spaces
+
+    avoid_tags = {'Undo', 'Manual revert'} # not currently used
+
+    not_latest = set()
+    start_ts = start_time.isoformat()
+    for x in SITE.recentchanges(start=current_time, end=end_time, changetype='edit',
+            namespaces=spaces, minor=False, bot=False, redirect=False,):
+
+        # has been superseded by a newer non-minor, non-bot, 
+        # potentially signature-adding edit
+        if x['pageid'] in not_latest:
+            continue
+
+        if x['newlen'] - x['oldlen'] < 42:
+            continue
+
+        if x['timestamp'] <= start_ts:
+            page = Page(SITE, x['title'])
+            if can_edit(page, n_sigs=5):
+                yield page
+        not_latest.add(x['pageid'])
+
 def fix_page(page):
     if type(page) == str:
         page = Page(SITE, page)
@@ -218,7 +216,7 @@ def fix_page(page):
     if page.text != new_text:
         page.text = new_text
         try:
-            page.save(summary='Adjusting indentation. Test edit. See the [[Wikipedia:Bots/Requests for approval/IndentBot|request for approval]].',
+            page.save(summary='Adjusting indentation. Test edit. See the [[Wikipedia:Bots/Requests for approval/IndentBot|request for approval]] and report issues there.',
                 minor=True, botflag=True, nocreate=True)
             return True
         except Exception as e:
@@ -228,14 +226,14 @@ def fix_page(page):
 def main(limit = None):
     if limit is None:
         limit = float('inf')
+
     count = 0
     for p in pages_to_check():
         count += fix_page(p)
         if count >= limit:
             break
 
-
 if __name__ == "__main__":
-    print('main function')
+    print(MONTH_TO_INT)
     #main()
 

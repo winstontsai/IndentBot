@@ -128,20 +128,20 @@ def fix_indent_style(lines, keep_hashes=True):
     return new_lines
 
 ################################################################################
-def can_edit(page, n_sigs = 10):
+def can_edit(page, n_sigs):
     title, text = page.title(), page.text
 
     if '<!--NO INDENTBOT' in text:
         return False
 
     current_time = datetime.utcnow()
-    delta = timedelta(days=1)
+    recent = timedelta(days=1)
     has_recent_sig = False
     for count, m in enumerate(re.finditer(SIGNATURE_PATTERN, text), start=1):
         if not has_recent_sig:
             # year, month, day, hour, minute
             pieces = map(int, [m[5], MONTH_TO_INT[m[4]], m[3], m[1], m[2]])
-            has_recent_sig = current_time - datetime(*pieces) < delta
+            has_recent_sig = current_time - datetime(*pieces) < recent
         if count >= n_sigs and has_recent_sig:
             return True
     return False
@@ -156,31 +156,28 @@ def pages_to_check(chunk=10, delay=10):
     start_time = current_time - timedelta(minutes=delay)
     end_time = start_time - timedelta(minutes=chunk, seconds=1)
 
-    # 0   (Main/Article)  Talk              1
-    # 2   User            User talk         3
-    # 4   Wikipedia       Wikipedia talk    5
-    # 6   File            File talk         7
-    # 8   MediaWiki       MediaWiki talk    9
-    # 10  Template        Template talk     11
-    # 12  Help            Help talk         13
-    # 14  Category        Category talk     15
     talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
     other_spaces = [4]
     spaces = talk_spaces + other_spaces
-    sandbox_templates = ['Template:Sandbox heading']
 
-    not_latest, start_ts = set(), start_time.isoformat()
+    avoid_tags = {'Undo', 'Manual revert'} # not currently used
+
+    not_latest = set()
+    start_ts = start_time.isoformat()
     for x in SITE.recentchanges(start=current_time, end=end_time, changetype='edit',
             namespaces=spaces, minor=False, bot=False, redirect=False,):
-        if x['timestamp'] <= start_ts and x['pageid'] not in not_latest:
-            title = x['title']
-            ns    = x['ns']
 
-            # if re.search(r'/([sS]andbox|[aA]rchives?|[lL]ogs?)\d*', title):
-            #     continue
+        # has been superseded by a newer non-minor, non-bot, 
+        # potentially signature-adding edit
+        if x['pageid'] in not_latest:
+            continue
 
-            page = Page(SITE, title)
-            if can_edit(page):
+        if x['newlen'] - x['oldlen'] < 50:
+            continue
+
+        if x['timestamp'] <= start_ts:
+            page = Page(SITE, x['title'])
+            if can_edit(page, n_sigs=5):
                 yield page
         not_latest.add(x['pageid'])
 
@@ -217,9 +214,9 @@ def make_fixes(text):
 def fix_page(page):
     if type(page) == str:
         page = Page(SITE, page)
-    original_text = page.text
-    page.text = make_fixes(original_text)
-    if page.text != original_text:
+    new_text = make_fixes(page.text)
+    if page.text != new_text:
+        page.text = new_text
         try:
             page.save(summary='Adjusting indentation. Test edit. See the [[Wikipedia:Bots/Requests for approval/IndentBot|request for approval]].',
                 minor=True, botflag=True, nocreate=True)

@@ -5,11 +5,9 @@ import time
 from calendar import month_name
 from datetime import datetime, timedelta
 
-import pywikibot as pwb
 import wikitextparser as wtp
 
 from pywikibot import Page, Site, Timestamp
-from pywikibot.tools import filter_unique
 ################################################################################
 
 SITE = Site('en','wikipedia')
@@ -17,13 +15,12 @@ SITE.login(user='IndentBot')
 
 MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
 SIGNATURE_PATTERN = (
-    r'\[\[[Uu]ser[^\n]+?'                     # user page link
+    r'\[\[[Uu]ser(?: talk)?:[^\n]+?'                     # user page link
     r'([0-2]\d):([0-5]\d), '                  # hh:mm
     r'([1-3]?\d) '                            # day
-    f'({"|".join(m for m in MONTH_TO_INT)}) ' # month
+    f'({"|".join(m for m in MONTH_TO_INT)}) ' # month name
     r'(2\d{3}) \(UTC\)'                       # yyyy
 )
-
 
 def log_error(error):
     timestring = datetime.utcnow().isoformat()[-7]
@@ -41,6 +38,9 @@ def indent_text(line):
 def indent_lvl(line):
     return len(indent_text(line))
 
+
+################################################################################
+# Fix gaps between indented lines
 def fix_gaps(lines, squish=True, single_only=False):
     """
     Remove gaps sandwiched indented lines.
@@ -75,7 +75,7 @@ def fix_gaps(lines, squish=True, single_only=False):
 
     return [x for x in lines if x]
 
-
+################################################################################
 def fix_extra_indents(lines):
     """
     Fix extra indentation.
@@ -86,19 +86,24 @@ def fix_extra_indents(lines):
         x, y = indent_lvl(lines[i]), indent_lvl(lines[i+1])
         if y <= x + 1:
             continue
-        extra = y - x - 1
+        #if extra indent is going from '#' to '#:*' or '#:#', then skip
+        # if lines[i][x-1]=='#' and lines[i][:x] == lines[i+1][:y-2] and lines[i+1][y-1] != ':':
+        #     continue
+        diff = y - x
         for j in range(i + 1, n):
-            z = indent_lvl(lines[j])
+            l = lines[j]
+            z = indent_lvl(l)
             if z < y:
                 break
-            # Do not change lines with '#' as an indent character.
-            if '#' in indent_text(lines[j]):
-                continue
-            # lines[j] = lines[j][:z - extra] + lines[j][z:] # chop off end
-            lines[j] = lines[j][extra:]     # chop off start
+            # chop off end of indentation, but keep end type
+            # this is done by trimming extra+1 chars, then adding back the end char
+            lines[j] = l[:z - diff] + l[z-1] + l[z:]
     return lines[1:]
 
-def fix_indent_style(lines, keep_hashes=True):
+
+################################################################################
+# Fix mixed indentation types
+def fix_indent_style(lines):
     """
     Do not mix indent styles. Each line's indentation style must match
     the most recently used indentation style.
@@ -109,27 +114,27 @@ def fix_indent_style(lines, keep_hashes=True):
     for line in lines:
         lvl = indent_lvl(line)
         minlvl = min(lvl, previous_lvl)
-    
-        closest_min_lvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
-        min_text = indent_dict[closest_min_lvl] + line[closest_min_lvl:minlvl]
-        if keep_hashes:
-            new_prefix = ''
-            for c1, c2 in zip(min_text, line[:minlvl]):
-                if c2 == '#':
-                    new_prefix += c2
-                elif c1 != '#':
-                    new_prefix += c1
-                else:
-                    new_prefix += c2
-        else:
-            new_prefix = min_text
-        new_lines.append(new_prefix + line[minlvl:])
+
+        # This is only necessary when using certain strategies to fix indentation lvls.
+        # It's a generalization of the naive strategy, but has the same result for most pages.
+        closest_to_minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
+
+        new_prefix = ''
+        for c1, c2 in zip(indent_dict[closest_to_minlvl], line):
+            if '#' in (c1, c2):
+                new_prefix += c2
+            else:
+                new_prefix += c1
+        new_lines.append(new_prefix + line[closest_to_minlvl:])
 
         indent_dict[lvl] = indent_text(new_lines[-1]) # record style
         previous_lvl = lvl
     return new_lines
 
-def make_fixes(text):
+
+################################################################################
+# Apply the fixes to some text
+def line_partition(text):
     wt = wtp.parse(text)
 
     bad_spans = []
@@ -140,24 +145,28 @@ def make_fixes(text):
         if '\n' in text[i:j]:
             bad_spans.append((i, j))
 
-    def not_in_bad_span(i):
-        return not any(start<=i<end for start, end in bad_spans)
+    # for some reason, whitespace followed by a Category link doesn't break lists??
+    for m in re.finditer(r'\s+\[\[category:', text, flags=re.I):
+        bad_spans.append(m.span())
 
     # partition into lines
     prev, lines = 0, []
     for i, c in enumerate(text):
-        if c == '\n' and not_in_bad_span(i):
+        if c == '\n' and not any(start<=i<end for start, end in bad_spans):
             lines.append(text[prev:i + 1])
             prev = i + 1
     lines.append(text[prev:]) # since Wikipedia strips newlines from the end
-    # print(lines)
+    #print(lines)
+    return lines
 
-    # The order of these fixes is important.
-    #Changing the order can change the effects.
+def apply_fixes(text):
+    lines = line_partition(text)
+
     lines = fix_gaps(lines)
-    lines = fix_extra_indents(lines)
+    lines = fix_extra_indents2(lines)
     lines = fix_indent_style(lines)
     return ''.join(lines)
+
 
 ################################################################################
 def can_edit(page, n_sigs):
@@ -182,7 +191,7 @@ def pages_to_check(chunk=10, delay=10):
     """
     current_time = SITE.server_time()
     start_time = current_time - timedelta(minutes=delay)
-    end_time = start_time - timedelta(minutes=chunk, seconds=3)
+    end_time = start_time - timedelta(minutes=chunk, seconds=5)
 
     talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
     other_spaces = [4]
@@ -200,19 +209,34 @@ def pages_to_check(chunk=10, delay=10):
         if x['pageid'] in not_latest:
             continue
 
-        if x['newlen'] - x['oldlen'] < 42:
+        # If a signature is added, the bytes should increase
+        if x['newlen'] - x['oldlen'] < 42: # 42 is the answer to everything
             continue
 
         if x['timestamp'] <= start_ts:
             page = Page(SITE, x['title'])
-            if can_edit(page, n_sigs=5):
+            if can_edit(page, n_sigs=2):
                 yield page
         not_latest.add(x['pageid'])
 
 def fix_page(page):
     if type(page) == str:
         page = Page(SITE, page)
-    new_text = make_fixes(page.text)
+    new_text = apply_fixes(page.text)
+    if page.text != new_text:
+        page.text = new_text
+        try:
+            page.save(summary='Adjusting indentation. Test edit. See the [[Wikipedia:Bots/Requests for approval/IndentBot|request for approval]] and report issues there.',
+                minor=True, botflag=True, nocreate=True)
+            return True
+        except Exception as e:
+            log_error(e)
+    return False
+
+def fix_page2(page):
+    if type(page) == str:
+        page = Page(SITE, page)
+    new_text = apply_fixes2(page.text)
     if page.text != new_text:
         page.text = new_text
         try:

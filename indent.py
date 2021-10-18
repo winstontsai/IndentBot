@@ -1,3 +1,4 @@
+# Fix indentation in discussion pages on Wikipedia.
 import re
 import sys
 import time
@@ -15,7 +16,7 @@ SITE.login(user='IndentBot')
 
 MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
 SIGNATURE_PATTERN = (
-    r'\[\[[Uu]ser(?: talk)?:[^\n]+?'                     # user page link
+    r'\[\[[Uu]ser(?: talk)?:[^\n]+?'          # user page link
     r'([0-2]\d):([0-5]\d), '                  # hh:mm
     r'([1-3]?\d) '                            # day
     f'({"|".join(m for m in MONTH_TO_INT)}) ' # month name
@@ -87,18 +88,15 @@ def fix_extra_indents(lines):
         if y <= x + 1:
             continue
         #if extra indent is going from '#' to '#:*' or '#:#', then skip
-        # if lines[i][x-1]=='#' and lines[i][:x] == lines[i+1][:y-2] and lines[i+1][y-1] != ':':
-        #     continue
+        if lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
+            continue
         diff = y - x
         for j in range(i + 1, n):
             l = lines[j]
-            z = indent_lvl(l)
-            if z < y:
+            if indent_lvl(l) < y:
                 break
-            # chop off end of indentation, but keep end type
-            # this is done by trimming extra+1 chars, then adding back the end char
-            lines[j] = l[:z - diff] + l[z-1] + l[z:]
-    return lines[1:]
+            lines[j] = l[:x] + l[y-1:] # cut l[x:y-1] from indentation
+    return lines[1:] # don't return the extra line we inserted
 
 
 ################################################################################
@@ -134,22 +132,48 @@ def fix_indent_style(lines):
 
 ################################################################################
 # Apply the fixes to some text
+def apply_fixes(text, rounds = 2):
+    for i in range(rounds):
+        lines = line_partition(text)
+        lines = fix_gaps(lines)
+        lines = fix_extra_indents(lines)
+        lines = fix_indent_style(lines)
+        text = ''.join(lines)
+    return text
+
 def line_partition(text):
+    """
+    We break on all newlines EXCEPT
+    1. newlines before tables
+    2. newlines before templates
+    3. newlines before tags
+    5. newlines immediately followed by a line consisting of spaces and comments
+    4. newlines that are part of a segment of whitespace immediately preceding a category link
+    """
     wt = wtp.parse(text)
 
     bad_spans = []
-    for x in wt.comments + wt.tables + wt.templates + wt.get_tags():
+    for x in wt.tables + wt.templates + wt.get_tags():
         i, j = x.span
         if i - 1 >= 0 and text[i - 1] == '\n':
             i -= 1
         if '\n' in text[i:j]:
             bad_spans.append((i, j))
 
-    # for some reason, whitespace followed by a Category link doesn't break lists??
-    for m in re.finditer(r'\s+\[\[category:', text, flags=re.I):
+    for x in wt.comments:
+        if '\n' in str(x):
+            bad_spans.append(x.span)
+
+    # newline followed by line consisting of spaces and comments only doesn't break lines
+    for m in re.finditer(r'\n *<!--(.(?<!-->))*?-->(<!--(.(?<!-->))*?-->| )*(?=\n)', text, flags=re.S):
         bad_spans.append(m.span())
 
-    # partition into lines
+    # whitespace followed by a Category link doesn't break lines
+    for m in re.finditer(r'\s+\[\[Category:', text, flags=re.I):
+        if '\n' in m[0]:
+            bad_spans.append(m.span())
+
+    # now partition into lines
     prev, lines = 0, []
     for i, c in enumerate(text):
         if c == '\n' and not any(start<=i<end for start, end in bad_spans):
@@ -158,15 +182,6 @@ def line_partition(text):
     lines.append(text[prev:]) # since Wikipedia strips newlines from the end
     #print(lines)
     return lines
-
-def apply_fixes(text):
-    lines = line_partition(text)
-
-    lines = fix_gaps(lines)
-    lines = fix_extra_indents2(lines)
-    lines = fix_indent_style(lines)
-    return ''.join(lines)
-
 
 ################################################################################
 def can_edit(page, n_sigs):
@@ -210,7 +225,7 @@ def pages_to_check(chunk=10, delay=10):
             continue
 
         # If a signature is added, the bytes should increase
-        if x['newlen'] - x['oldlen'] < 42: # 42 is the answer to everything
+        if x['newlen'] - x['oldlen'] < 42: # 42 is the answer to everything :)
             continue
 
         if x['timestamp'] <= start_ts:
@@ -258,6 +273,6 @@ def main(limit = None):
             break
 
 if __name__ == "__main__":
-    print(MONTH_TO_INT)
+    print(SIGNATURE_PATTERN)
     #main()
 

@@ -143,12 +143,18 @@ def apply_fixes(text, rounds = 2):
 
 def line_partition(text):
     """
-    We break on all newlines EXCEPT
+    We break on all newlines except those which should not be split on because
+    1) Editors may not want the list to break there, and logically continue the
+       same list on the subsequent line (usually with colon indentation), or
+    2) Mediawiki doesn't treat it as breaking a list.
+
+    So, we break on all newlines EXCEPT
     1. newlines before tables
     2. newlines before templates
     3. newlines before tags
-    5. newlines immediately followed by a line consisting of spaces and comments
-    4. newlines that are part of a segment of whitespace immediately preceding a category link
+    -----------------------
+    4. newlines immediately followed by a line consisting of spaces and comments
+    5. newlines that are part of a segment of whitespace immediately preceding a category link
     """
     wt = wtp.parse(text)
 

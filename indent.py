@@ -4,6 +4,7 @@ import sys
 import time
 
 from calendar import month_name
+from collections import OrderedDict
 from datetime import datetime, timedelta
 
 import wikitextparser as wtp
@@ -39,6 +40,11 @@ def indent_text(line):
 def indent_lvl(line):
     return len(indent_text(line))
 
+def visual_lvl(line):
+    # Hashes count for two lvls
+    x = indent_text(line)
+    return len(x) + x.count('#')
+
 
 ################################################################################
 # Fix gaps between indented lines
@@ -49,6 +55,7 @@ def fix_gaps(lines, squish=True, single_only=False):
     Set squish to False to KEEP blank lines preceding a line with indent lvl 1.
     Set single_only to False to remove single-line AND certain multi-line gaps.
     """
+    lines = list(lines)
     i, n = 0, len(lines)
     while i < n:
         txt_i = indent_text(lines[i])
@@ -77,27 +84,34 @@ def fix_gaps(lines, squish=True, single_only=False):
     return [x for x in lines if x]
 
 ################################################################################
-def fix_extra_indents(lines):
+def fix_extra_indents(lines, initial_pass = False):
     """
     Fix extra indentation.
     """
+    lines = list(lines)
     lines.insert(0, '\n') # for handling first line edge case
     n = len(lines)
     for i in range(n - 1):
-        x, y = indent_lvl(lines[i]), indent_lvl(lines[i+1])
-        if y <= x + 1:
-            continue
-        #if extra indent is going from '#' to '#:*' or '#:#', then skip
-        if lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
-            continue
+        l1, l2 = lines[i:i+2]
+        x, y = indent_lvl(l1), indent_lvl(l2)
         diff = y - x
+        if diff <= 1:
+            continue
+
+        # check that visually it is an overindentation
+        if visual_lvl(l2) - visual_lvl(l1) <= 1:
+            continue
+
+        #if extra indent starts from '#' and ends with '*' or '#', then remove one less
+        if x and lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
+            diff -= 1
+
         for j in range(i + 1, n):
             l = lines[j]
             if indent_lvl(l) < y:
                 break
-            lines[j] = l[:x] + l[y-1:] # cut l[x:y-1] from indentation
+            lines[j] = l[:x] + l[x+diff-1:] # cut l[x:y-1] from indentation
     return lines[1:] # don't return the extra line we inserted
-
 
 ################################################################################
 # Fix mixed indentation types
@@ -107,39 +121,55 @@ def fix_indent_style(lines):
     the most recently used indentation style.
     """
     new_lines = []
-    previous_lvl = 0
+    prev_lvl = 0
     indent_dict = {0: ''}
     for line in lines:
         lvl = indent_lvl(line)
-        minlvl = min(lvl, previous_lvl)
+        minlvl = min(lvl, prev_lvl)
 
         # This is only necessary when using certain strategies to fix indentation lvls.
         # It's a generalization of the naive strategy, but has the same result for most pages.
-        closest_to_minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
+        minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
         new_prefix = ''
-        for c1, c2 in zip(indent_dict[closest_to_minlvl], line):
-            if '#' in (c1, c2):
+        p1, p2 = 0, 0
+        while p1 < minlvl and p2 < lvl:
+            c1 = indent_dict[minlvl][p1]
+            c2 = line[p2]
+            if c1 == '#':
+                if p2 <= lvl - 3 and line[p2:p2+2] == '::':
+                    new_prefix += '#'
+                    p2 += 1
+                else:
+                    new_prefix += c2
+            elif c2 == '#':
                 new_prefix += c2
             else:
                 new_prefix += c1
-        new_lines.append(new_prefix + line[closest_to_minlvl:])
-
-        indent_dict[lvl] = indent_text(new_lines[-1]) # record style
-        previous_lvl = lvl
+            p1 += 1
+            p2 += 1
+        new_indent = new_prefix + line[p2:lvl]
+        new_lines.append(new_indent + line[lvl:])
+        indent_dict[len(new_indent)] = new_indent # record style
+        prev_lvl = len(new_indent)
+        
     return new_lines
-
 
 ################################################################################
 # Apply the fixes to some text
-def apply_fixes(text, rounds = 2):
-    for i in range(rounds):
-        lines = line_partition(text)
-        lines = fix_gaps(lines)
-        lines = fix_extra_indents(lines)
-        lines = fix_indent_style(lines)
-        text = ''.join(lines)
-    return text
+def apply_fixes(text):
+    lines = line_partition(text)
+
+    new_lines = fix_gaps(lines)
+    new_lines = fix_extra_indents(new_lines)
+    new_lines = fix_indent_style(new_lines)
+
+    while new_lines != lines:
+        lines = new_lines
+        new_lines = fix_gaps(new_lines)
+        new_lines = fix_extra_indents(new_lines)
+        new_lines = fix_indent_style(new_lines)
+    return ''.join(new_lines)
 
 def line_partition(text):
     """
@@ -190,57 +220,76 @@ def line_partition(text):
     return lines
 
 ################################################################################
-def can_edit(page, n_sigs):
-    title, text = page.title(), page.text
-    current_time = datetime.utcnow()
-    recent = timedelta(days=1)
-    has_recent_sig = False
-    for count, m in enumerate(re.finditer(SIGNATURE_PATTERN, text), start=1):
-        if not has_recent_sig:
-            # year, month, day, hour, minute
-            pieces = map(int, [m[5], MONTH_TO_INT[m[4]], m[3], m[1], m[2]])
-            has_recent_sig = current_time - datetime(*pieces) < recent
-        if count >= n_sigs and has_recent_sig:
-            return True
-    return False
-
-def pages_to_check(chunk=10, delay=10):
-    """
-    Yields discussion pages edited between delay and delay+chunk minutes ago
-    which are non-minor, non-bot, non-redirect,
-    and have not had a non-minor, non-bot edit made in the last delay minutes.
-    """
-    current_time = SITE.server_time()
-    start_time = current_time - timedelta(minutes=delay)
-    end_time = start_time - timedelta(minutes=chunk, seconds=5)
-
+# Create continuous generator of pages to edit
+def recent_changes(start, end):
     talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
     other_spaces = [4]
     spaces = talk_spaces + other_spaces
 
-    avoid_tags = {'Undo', 'Manual revert'} # not currently used
-
-    not_latest = set()
-    start_ts = start_time.isoformat()
-    for x in SITE.recentchanges(start=current_time, end=end_time, changetype='edit',
-            namespaces=spaces, minor=False, bot=False, redirect=False,):
-
-        # has been superseded by a newer non-minor, non-bot, 
-        # potentially signature-adding edit
-        if x['pageid'] in not_latest:
+    seen = set()
+    for change in SITE.recentchanges(start=start, end=end, changetype='edit',
+            namespaces=spaces, minor=False, bot=False, redirect=False, reverse=True):
+        title = change['title']
+        if title in seen:
+            continue
+        # Bytes should increase
+        if change['newlen'] - change['oldlen'] < 42: # 42 is the answer to everything :)
+            continue
+        # check for signature with matching timestamp
+        page = Page(SITE, title)
+        text = page.text
+        t = change['timestamp'] # e.g. 2021-10-19T02:46:45Z
+        recent_sig_pat = (
+            r'\[\[[Uu]ser(?: talk)?:[^\n]+?'   # user link
+            fr'{t[11:13]}:{t[14:16]}, '        # hh:mm
+            fr'{t[8:10].lstrip("0")} '         # day
+            fr'{month_name[int(t[5:7])]} '     # month name
+            fr'{t[:4]} \(UTC\)'                # yyyy
+        )
+        # check for at least a few signatures
+        if not re.search(recent_sig_pat, text):
+            continue
+        for count, m in enumerate(re.finditer(SIGNATURE_PATTERN, text), start=1):
+            if count >= 2:
+                break
+        else:
             continue
 
-        # If a signature is added, the bytes should increase
-        if x['newlen'] - x['oldlen'] < 42: # 42 is the answer to everything :)
-            continue
+        seen.add(title)
+        yield (title, t)
 
-        if x['timestamp'] <= start_ts:
-            page = Page(SITE, x['title'])
-            if can_edit(page, n_sigs=2):
-                yield page
-        not_latest.add(x['pageid'])
+def continuous_pages_to_check(chunk=2, delay=10):
+    """
+    Check recent changes in intervals of chunk minutes (plus processing time).
+    Give at least delay minutes of buffer time before editing.
+    Should have chunk <= .2 * delay.
+    """
+    change_dict = OrderedDict() # right side is newer side
+    delay, one_sec = timedelta(minutes=delay), timedelta(seconds=1)
+    old_time = SITE.server_time() - timedelta(minutes=chunk)
+    while True:
+        current_time = SITE.server_time()
+        for title, ts in recent_changes(old_time+one_sec, current_time):
+            change_dict[title] = ts
+            change_dict.move_to_end(title)
 
+        cutoff_ts = (current_time - delay).isoformat()
+        values = change_dict.values()
+        oldest_ts = next(iter(values), None)
+        while oldest_ts is not None and oldest_ts < cutoff_ts:
+            title = change_dict.popitem(last=False)[0]
+            yield Page(SITE, title)
+            oldest_ts = next(iter(values), None)
+
+        old_time = current_time
+        time.sleep(chunk * 60)
+
+################################################################################
+# Function to fix and save a page, and main function to run continuous program.
 def fix_page(page):
+    """
+    Apply fixes to a page and save it.
+    """
     if type(page) == str:
         page = Page(SITE, page)
     new_text = apply_fixes(page.text)
@@ -254,31 +303,15 @@ def fix_page(page):
             log_error(e)
     return False
 
-def fix_page2(page):
-    if type(page) == str:
-        page = Page(SITE, page)
-    new_text = apply_fixes2(page.text)
-    if page.text != new_text:
-        page.text = new_text
-        try:
-            page.save(summary='Adjusting indentation. Test edit. See the [[Wikipedia:Bots/Requests for approval/IndentBot|request for approval]] and report issues there.',
-                minor=True, botflag=True, nocreate=True)
-            return True
-        except Exception as e:
-            log_error(e)
-    return False
-
 def main(limit = None):
     if limit is None:
         limit = float('inf')
-
     count = 0
-    for p in pages_to_check():
+    for p in continuous_pages_to_check():
         count += fix_page(p)
         if count >= limit:
             break
 
 if __name__ == "__main__":
-    print(SIGNATURE_PATTERN)
-    #main()
+    print('main')
 

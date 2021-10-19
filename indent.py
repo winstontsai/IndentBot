@@ -230,6 +230,11 @@ def recent_changes(start, end):
     for change in SITE.recentchanges(start=start, end=end, changetype='edit',
             namespaces=spaces, minor=False, bot=False, redirect=False, reverse=True):
         title = change['title']
+
+        # stop if IndentBot's talk page has been edited with appropriate edit summary
+        if title == 'User talk:IndentBot' and 'STOP' in change['comment']:
+            sys.exit(0)
+
         if title in seen:
             continue
         # Bytes should increase
@@ -269,17 +274,19 @@ def continuous_pages_to_check(chunk=2, delay=10):
     old_time = SITE.server_time() - timedelta(minutes=chunk)
     while True:
         current_time = SITE.server_time()
+        # get new changes
         for title, ts in recent_changes(old_time+one_sec, current_time):
             change_dict[title] = ts
             change_dict.move_to_end(title)
 
+        # yield pages that have waited long enough
         cutoff_ts = (current_time - delay).isoformat()
-        values = change_dict.values()
-        oldest_ts = next(iter(values), None)
-        while oldest_ts is not None and oldest_ts < cutoff_ts:
-            title = change_dict.popitem(last=False)[0]
-            yield Page(SITE, title)
-            oldest_ts = next(iter(values), None)
+        item_view = change_dict.items()
+        oldest = next(iter(item_view), None)
+        while oldest is not None and oldest[1] < cutoff_ts:
+            yield Page(SITE, oldest[0])
+            change_dict.popitem(last=False)
+            oldest = next(iter(item_view), None)
 
         old_time = current_time
         time.sleep(chunk * 60)

@@ -1,4 +1,5 @@
 # Fix indentation in discussion pages on Wikipedia.
+import logging
 import re
 import sys
 import time
@@ -14,6 +15,7 @@ from pywikibot import Page, Site, Timestamp
 
 SITE = Site('en','wikipedia')
 SITE.login(user='IndentBot')
+LOGFILE = '/data/project/indentbot/logs/indentbot.logs'
 
 MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
 SIGNATURE_PATTERN = (
@@ -24,12 +26,6 @@ SIGNATURE_PATTERN = (
     r'(2\d{3}) \(UTC\)'                       # yyyy
 )
 
-def log_error(error):
-    timestring = datetime.utcnow().isoformat()[-7]
-    logfile = '/data/project/indentbot/logs/save_errors'
-    with open(logfile, 'a') as f:
-        print(f'{timestring} {x.page.pageid} [[{x.page.title()}]]: {x}',
-            file=f, flush=True)
 
 def is_blank_line(line):
     return bool(re.fullmatch(r'\s+', line))
@@ -70,17 +66,20 @@ def fix_gaps(lines, squish=True, single_only=False):
         txt_j = indent_text(lines[j])
         lvl_j = len(txt_j)
         if lvl_j >= 2 - squish:
-            safe_to_remove = False
             if j - i == 2:
                 safe_to_remove = True
-            elif not single_only and (lvl_j>1 or txt_i.startswith(txt_j) or txt_j.startswith(txt_i)):
+            elif single_only:
+                safe_to_remove = False
+            elif lvl_j>1:
                 safe_to_remove = True
-
+            else:
+                hash_i = txt_i.replace('*', ':')
+                hash_j = txt_j.replace('*', ':')
+                safe_to_remove = hash_i.startswith(hash_j) or hash_j.startswith(hash_i)
             if safe_to_remove:
                 for k in range(i + 1, j):
                     lines[k] = ''
         i = j
-
     return [x for x in lines if x]
 
 ################################################################################
@@ -152,7 +151,6 @@ def fix_indent_style(lines):
         new_lines.append(new_indent + line[lvl:])
         indent_dict[len(new_indent)] = new_indent # record style
         prev_lvl = len(new_indent)
-        
     return new_lines
 
 ################################################################################
@@ -232,7 +230,8 @@ def recent_changes(start, end):
         title = change['title']
 
         # stop if IndentBot's talk page has been edited with appropriate edit summary
-        if title == 'User talk:IndentBot' and 'STOP' in change['comment']:
+        if title == 'User talk:IndentBot' and 'STOP' in change.get('comment', ''):
+            logger.error(f"Stopped by {change['user']} with edit to talk page. Revid {change['revid']}.")
             sys.exit(0)
 
         if title in seen:
@@ -307,10 +306,11 @@ def fix_page(page):
                 minor=True, botflag=True, nocreate=True)
             return True
         except Exception as e:
-            log_error(e)
+            logger.exception('Error on save.')
     return False
 
 def main(limit = None):
+
     if limit is None:
         limit = float('inf')
     count = 0
@@ -320,5 +320,13 @@ def main(limit = None):
             break
 
 if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
+    file_handler = logging.FileHandler(filename = "logs/indentbot.log")
+    formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.INFO)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
     print('main')
 

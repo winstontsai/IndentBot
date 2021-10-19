@@ -3,6 +3,7 @@ __pycache__/
 apicache-py3/
 env/
 storage/
+logs/
 pywikibot.lwp
 throttle.ctrl
 user-config.py

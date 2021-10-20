@@ -70,16 +70,11 @@ def fix_gaps(lines, squish=True, single_only=False):
         txt_j = indent_text(lines[j])
         lvl_j = len(txt_j)
         if lvl_j >= 2 - squish:
+            safe_to_remove = False
             if j - i == 2:
                 safe_to_remove = True
-            elif single_only:
-                safe_to_remove = False
-            elif lvl_j>1:
+            elif not single_only and lvl_j > 1:
                 safe_to_remove = True
-            else:
-                hash_i = txt_i.replace('*', ':')
-                hash_j = txt_j.replace('*', ':')
-                safe_to_remove = hash_i.startswith(hash_j) or hash_j.startswith(hash_i)
             if safe_to_remove:
                 for k in range(i + 1, j):
                     lines[k] = ''
@@ -177,7 +172,8 @@ def line_partition(text):
     """
     We break on all newlines except those which should not be split on because
     1) Editors may not want the list to break there, and logically continue the
-       same list on the subsequent line (usually with colon indentation), or
+       same list after whatever was introduced on that line
+       (usually with colon indentation), or
     2) Mediawiki doesn't treat it as breaking a list.
 
     So, we break on all newlines EXCEPT
@@ -187,6 +183,7 @@ def line_partition(text):
     -----------------------
     4. newlines immediately followed by a line consisting of spaces and comments
     5. newlines that are part of a segment of whitespace immediately preceding a category link
+    6. ?????
     """
     wt = wtp.parse(text)
 
@@ -225,13 +222,21 @@ def line_partition(text):
 # Create continuous generator of pages to edit
 def recent_changes(start, end):
     talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
-    other_spaces = [4]
+    other_spaces = [4, 10]
     spaces = talk_spaces + other_spaces
+
+    # prefixes for edge case discussion pages
+    page_prefixes = ['Template:Did you know nominations/', ]
 
     pagetexts = dict()
     for change in SITE.recentchanges(start=start, end=end, changetype='edit',
             namespaces=spaces, minor=False, bot=False, redirect=False, reverse=True):
         title = change['title']
+
+        # Edge case namespaces
+        if change['ns'] == 10:
+            if not any(title.startswith(prefix) for prefix in page_prefixes):
+                continue
 
         # stop if IndentBot's talk page has been edited with appropriate edit summary
         if title == 'User talk:IndentBot' and 'STOP' in change.get('comment', ''):
@@ -287,9 +292,9 @@ def continuous_pages_to_check(chunk=2, delay=10):
         cutoff_ts = (current_time - delay).isoformat()
         item_view = edits.items()
         oldest = next(iter(item_view), None)
-        while oldest is not None and oldest[1] < cutoff_ts:
+        while oldest is not None and oldest[1] <= cutoff_ts:
             yield Page(SITE, oldest[0])
-            change_dict.popitem(last=False)
+            edits.popitem(last=False)
             oldest = next(iter(item_view), None)
         old_time = current_time
         time.sleep(chunk * 60)
@@ -307,7 +312,7 @@ def fix_page(page):
         page.text = new_text
         try:
             page.save(summary='Adjusting indentation. Test edit. See the [[Wikipedia:Bots/Requests for approval/IndentBot|request for approval]] and report issues there.',
-                minor=True, botflag=True, nocreate=True)
+                minor=True, nocreate=True)
             return True
         except pwb.exceptions.PageSaveRelatedError as e:
             logger.exception('Save related error.')

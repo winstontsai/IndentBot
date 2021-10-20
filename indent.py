@@ -8,6 +8,7 @@ from calendar import month_name
 from collections import OrderedDict
 from datetime import datetime, timedelta
 
+import pywikibot as pwb
 import wikitextparser as wtp
 
 from pywikibot import Page, Site, Timestamp
@@ -15,7 +16,6 @@ from pywikibot import Page, Site, Timestamp
 
 SITE = Site('en','wikipedia')
 SITE.login(user='IndentBot')
-LOGFILE = '/data/project/indentbot/logs/indentbot.logs'
 
 MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
 SIGNATURE_PATTERN = (
@@ -41,6 +41,10 @@ def visual_lvl(line):
     x = indent_text(line)
     return len(x) + x.count('#')
 
+def subtract_timestamps(x, y):
+    x = Timestamp.fromISOformat(x)
+    y = Timestamp.fromISOformat(y)
+    return x - y
 
 ################################################################################
 # Fix gaps between indented lines
@@ -224,7 +228,7 @@ def recent_changes(start, end):
     other_spaces = [4]
     spaces = talk_spaces + other_spaces
 
-    seen = set()
+    pagetexts = dict()
     for change in SITE.recentchanges(start=start, end=end, changetype='edit',
             namespaces=spaces, minor=False, bot=False, redirect=False, reverse=True):
         title = change['title']
@@ -234,21 +238,22 @@ def recent_changes(start, end):
             logger.error(f"Stopped by {change['user']} with edit to talk page. Revid {change['revid']}.")
             sys.exit(0)
 
-        if title in seen:
-            continue
         # Bytes should increase
         if change['newlen'] - change['oldlen'] < 42: # 42 is the answer to everything :)
             continue
+
         # check for signature with matching timestamp
-        page = Page(SITE, title)
-        text = page.text
-        t = change['timestamp'] # e.g. 2021-10-19T02:46:45Z
+        # cache page text
+        if title not in pagetexts:
+            pagetexts[title] = Page(SITE, title).text
+        text = pagetexts[title]
+        ts = change['timestamp'] # e.g. 2021-10-19T02:46:45Z
         recent_sig_pat = (
             r'\[\[[Uu]ser(?: talk)?:[^\n]+?'   # user link
-            fr'{t[11:13]}:{t[14:16]}, '        # hh:mm
-            fr'{t[8:10].lstrip("0")} '         # day
-            fr'{month_name[int(t[5:7])]} '     # month name
-            fr'{t[:4]} \(UTC\)'                # yyyy
+            fr'{ts[11:13]}:{ts[14:16]}, '      # hh:mm
+            fr'{ts[8:10].lstrip("0")} '        # day
+            fr'{month_name[int(ts[5:7])]} '    # month name
+            fr'{ts[:4]} \(UTC\)'               # yyyy
         )
         # check for at least a few signatures
         if not re.search(recent_sig_pat, text):
@@ -258,9 +263,7 @@ def recent_changes(start, end):
                 break
         else:
             continue
-
-        seen.add(title)
-        yield (title, t)
+        yield (title, ts)
 
 def continuous_pages_to_check(chunk=2, delay=10):
     """
@@ -268,25 +271,26 @@ def continuous_pages_to_check(chunk=2, delay=10):
     Give at least delay minutes of buffer time before editing.
     Should have chunk <= .2 * delay.
     """
-    change_dict = OrderedDict() # right side is newer side
+    edits = OrderedDict()
     delay, one_sec = timedelta(minutes=delay), timedelta(seconds=1)
     old_time = SITE.server_time() - timedelta(minutes=chunk)
     while True:
         current_time = SITE.server_time()
         # get new changes
         for title, ts in recent_changes(old_time+one_sec, current_time):
-            change_dict[title] = ts
-            change_dict.move_to_end(title)
+            if title in edits and subtract_timestamps(ts, edits[title]) > delay:
+                yield Page(SITE, title)
+            edits[title] = ts
+            edits.move_to_end(title)
 
         # yield pages that have waited long enough
         cutoff_ts = (current_time - delay).isoformat()
-        item_view = change_dict.items()
+        item_view = edits.items()
         oldest = next(iter(item_view), None)
         while oldest is not None and oldest[1] < cutoff_ts:
             yield Page(SITE, oldest[0])
             change_dict.popitem(last=False)
             oldest = next(iter(item_view), None)
-
         old_time = current_time
         time.sleep(chunk * 60)
 
@@ -305,12 +309,14 @@ def fix_page(page):
             page.save(summary='Adjusting indentation. Test edit. See the [[Wikipedia:Bots/Requests for approval/IndentBot|request for approval]] and report issues there.',
                 minor=True, botflag=True, nocreate=True)
             return True
+        except pwb.exceptions.PageSaveRelatedError as e:
+            logger.exception('Save related error.')
         except Exception as e:
-            logger.exception('Error on save.')
+            logger.exception('Other error on save.')
+            sys.exit(0)
     return False
 
 def main(limit = None):
-
     if limit is None:
         limit = float('inf')
     count = 0

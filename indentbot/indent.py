@@ -14,8 +14,11 @@ from pywikibot import Page, Site, Timestamp
 from pywikibot.exceptions import EditConflictError, OtherPageSaveError
 from pywikibot.exceptions import PageSaveRelatedError
 
+import patterns
+
 from logger import logger
-from patterns import *
+from patterns import BAD_PREFIXES, COMMENT_RE, SANDBOXES
+from patterns import in_subspan
 ################################################################################
 SITE = Site('en','wikipedia')
 SITE.login(user='IndentBot')
@@ -52,7 +55,7 @@ def is_talk_page(ns):
 def has_linebreaking_newline(line):
     # Return True if line contains "real" line break besides at the end
     # Considers newlines preceding tables, templates, and tags.
-    pat = r'\n' + f'( |{comment_re})*' + r'(\{[{|]|<[^!])'
+    pat = r'\n' + f'( |{COMMENT_RE})*' + r'(\{[{|]|<[^!])'
     return bool(re.search(pat, line))
 
 def diff_template(page, title=True):
@@ -151,7 +154,7 @@ def fix_indent_style(lines):
         minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
         # ignore lines starting with table
-        if re.match(fr':*( |{comment_re})*' + r'\{\|', line):
+        if re.match(fr':*( |{COMMENT_RE})*' + r'\{\|', line):
             new_indent = line[:lvl] # keep same indent
         else:
             new_prefix = ''
@@ -211,7 +214,7 @@ def line_partition(text):
 
     for x in wt.tables + wt.templates + wt.get_tags():
         i, j = x.span
-        m = re.search(fr'\n( |{comment_re})*\Z', text[:i])
+        m = re.search(fr'\n( |{COMMENT_RE})*\Z', text[:i])
         if m:
             i = m.start()
         if '\n' in text[i:j]:
@@ -222,7 +225,7 @@ def line_partition(text):
             bad_spans.append(x.span)
 
     # newline followed by line consisting of spaces and comments ONLY
-    for m in re.finditer(fr'\n *{comment_re}( |{comment_re})*(?=\n)',
+    for m in re.finditer(fr'\n *{COMMENT_RE}( |{COMMENT_RE})*(?=\n)',
             text, flags=re.S):
         bad_spans.append(m.span())
 
@@ -280,20 +283,17 @@ def is_sandbox(title):
     """
     Return True if it's a sandbox.
     """
-    sandboxes = ['Wikipedia:Sandbox', 'Wikipedia talk:Sandbox',
-        'User talk:Sandbox', 'User talk:Sandbox for user warnings',
-        'Wikipedia:Articles for creation/AFC sandbox',
-        'User:Sandbox']
-    if title in sandboxes:
+    if title in SANDBOXES:
         return True
 
     if re.search(r'/[sS]andbox(?: ?\d+)?(?:/|\Z)', title):
         return True
     return False
 
+
 def is_valid_template_page(title):
     """
-    Get valid template pages
+    Only edit certain template pages. An "opt-in" for the template namespace.
     """
     p = ['Template:Did you know nominations/', ]
     return any(title.startswith(x) for x in p)
@@ -301,6 +301,7 @@ def is_valid_template_page(title):
 def should_not_edit(title):
     """
     Returns True if a page should not be edited based on its title.
+    An "opt-out" based on titles.
     """
     if is_sandbox(title):
         return True
@@ -308,8 +309,7 @@ def should_not_edit(title):
     if title.startswith('Template:') and not is_valid_template_page(title):
         return True
 
-    bad_prefixes = ['Wikipedia:Templates for discussion/', ]
-    if any(title.startswith(x) for x in prefixes):
+    if any(title.startswith(x) for x in BAD_PREFIXES):
         return True
 
     return False
@@ -319,13 +319,12 @@ def recent_changes(start, end, min_sigs=3):
     other_spaces = [4, 10]
     spaces = talk_spaces + other_spaces
 
-    results = []
-
     # page cache for this function call
     pages = dict()
-    for change in SITE.recentchanges(start=start, end=end,
+
+    for change in SITE.recentchanges(start=start, end=end, reverse=True,
             changetype='edit', namespaces=spaces,
-            minor=False, bot=False, redirect=False, reverse=True):
+            minor=False, bot=False, redirect=False):
         title, ns = change['title'], change['ns']
         revid = change['revid']
         user = change['user']
@@ -372,8 +371,6 @@ def recent_changes(start, end, min_sigs=3):
             continue
 
         yield (title, ts, pages[title])
-        #results.append((title, ts, pages[title]))
-    #return results
 
 def continuous_pages_to_check(chunk=3, delay=15):
     """
@@ -418,8 +415,8 @@ def fix_page(page):
     if type(page) == str:
         page = Page(SITE, page)
     title = page.title()
-
-    new_text = fix_text(page.text)
+    # fix latest version so no edit conflict
+    new_text = fix_text(page.get(force=True)) 
     if page.text != new_text:
         page.text = new_text
         try:
@@ -439,7 +436,7 @@ def fix_page(page):
             logger.exception(f'Save related error for [[{title}]].')
             sys.exit(0)
         except Exception:
-            logger.exception(f'Error when saving [[{title}]].')
+            logger.exception(f'Unknown error when saving [[{title}]].')
             sys.exit(0)
 
 def main(limit = None, quiet = True):

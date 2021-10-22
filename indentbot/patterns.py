@@ -105,12 +105,18 @@ def construct_template(name, d):
 ##############################################################################
 # Regular expressions
 ##############################################################################
-comment_re = r'<!--(.(?<!-->))*?-->'
+COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 
-outdent_redirects = ['Outdent', 'Noindent', 'Unindent', 'Outdentarrow', 'Oda', 'Od',
-    'Out', 'De\\-indent', 'Deindent', 'Outindent', 'OD', 'Reduceindent',
-    'Dedent', 'Break\\ indent', 'Rethread']
-outdent_re = template_pattern(construct_redirects(outdent_redirects))
+
+##############################################################################
+# Storage for strings
+##############################################################################
+BAD_PREFIXES = ['Wikipedia:Templates for discussion/', ]
+
+SANDBOXES = ['Wikipedia:Sandbox', 'Wikipedia talk:Sandbox',
+    'User talk:Sandbox', 'User talk:Sandbox for user warnings',
+    'Wikipedia:Articles for creation/AFC sandbox',
+    'User:Sandbox']
 
 
 if __name__ == "__main__":

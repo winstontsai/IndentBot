@@ -308,6 +308,7 @@ def recent_changes(start, end, min_sigs=3):
     other_spaces = [4, 10]
     spaces = talk_spaces + other_spaces
 
+    results = []
     # page cache for this function call
     pages = dict()
     for change in SITE.recentchanges(start=start, end=end, changetype='edit',
@@ -360,7 +361,9 @@ def recent_changes(start, end, min_sigs=3):
         if not re.search(recent_sig_pat, text):
             continue
 
-        yield (title, ts, pages[title])
+        results.append((title, ts, pages[title]))
+    return results
+
 
 def continuous_pages_to_check(chunk=3, delay=15):
     """
@@ -422,7 +425,7 @@ def fix_page(page):
             sys.exit(0) # exit 0 so job is not restarted
 
 
-def main(limit = None, print_diff = False):
+def main(limit = None, print_diffs = False):
     if limit is None:
         limit = float('inf')
     count = 0
@@ -430,12 +433,11 @@ def main(limit = None, print_diff = False):
         diff = fix_page(p)
         if diff:
             count += 1
-            if print_diff:
+            if print_diffs:
                 print(diff)
         if count >= limit:
             break
 
 if __name__ == "__main__":
     pass
-    #main(50, True)
 

@@ -269,8 +269,6 @@ def fix_text2(text):
     text = ''.join(new_lines)
     return text
 
-
-
 ################################################################################
 # Create continuous generator of pages to edit
 def is_sandbox(title):
@@ -288,20 +286,28 @@ def is_sandbox(title):
         return True
     return False
 
-def has_bad_prefix(title):
-    """
-    Filter out pages which shouldn't be edited. Generally, these are groups
-    of pages with lots of edge cases.
-    """
-    prefixes = ['Wikipedia:Templates for discussion/', ]
-    return any(title.startswith(x) for x in prefixes)
-
 def is_valid_template_page(title):
     """
     Get valid template pages
     """
     p = ['Template:Did you know nominations/', ]
     return any(title.startswith(x) for x in p)
+
+def should_not_edit(title):
+    """
+    Returns True if a page should not be edited based on its title.
+    """
+    if is_sandbox(title):
+        return True
+
+    if title.startswith('Template:') and not is_valid_template_page(title):
+        return True
+
+    bad_prefixes = ['Wikipedia:Templates for discussion/', ]
+    if any(title.startswith(x) for x in prefixes):
+        return True
+
+    return False
 
 def recent_changes(start, end, min_sigs=3):
     talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
@@ -324,11 +330,7 @@ def recent_changes(start, end, min_sigs=3):
             logger.error(f"STOPPED by [[User:{user}]].\nRevid={revid}\nTimestamp={ts}\nComment={comment}")
             sys.exit(0) # exit 0 so job is not restarted
 
-        if is_sandbox(title) or has_bad_prefix(title):
-            continue
-
-        # Edge case namespaces
-        if ns == 10 and not is_valid_template_page(title):
+        if should_not_edit(title):
             continue
 
         # Bytes should increase
@@ -350,7 +352,7 @@ def recent_changes(start, end, min_sigs=3):
             else:
                 continue
 
-        # always check for signature with matching timestamp, regardless of namespace
+        # always check for signature with matching timestamp
         recent_sig_pat = (
             r'\[\[[Uu]ser(?: talk)?:[^\n]+?'   # user link
             fr'{ts[11:13]}:{ts[14:16]}, '      # hh:mm
@@ -409,18 +411,21 @@ def fix_page(page):
         page = Page(SITE, page)
     title = page.title()
 
-    old_text = page.get(force=True) # GET LATEST VERSION OF PAGE
-    new_text = fix_text(old_text)
-
-    if old_text != new_text:
+    new_text = fix_text(page.text)
+    if page.text != new_text:
         page.text = new_text
         try:
             page.save(summary='Adjusted indentation. See user page and [[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]] for more info.',
                 nocreate=True, minor=False, quiet=True)
             return diff_template(page)
-        except pwb.exceptions.PageSaveRelatedError as err:
+        # if there's an edit conflict, just ignore
+        except pwb.exceptions.EditConflictError:
+            logger.exception(f'Edit conflict for [[{title}]].')
+        # other errors result in exiting
+        except pwb.exceptions.PageSaveRelatedError:
             logger.exception(f'Save-related error for [[{title}]].')
-        except Exception as err:
+            sys.exit(0) # exit 0 so job is not restarted
+        except Exception:
             logger.exception(f'Other error when saving [[{title}]].')
             sys.exit(0) # exit 0 so job is not restarted
 
@@ -430,11 +435,11 @@ def main(limit = None, print_diffs = False):
         limit = float('inf')
     count = 0
     for p in continuous_pages_to_check():
-        diff = fix_page(p)
-        if diff:
+        diff_template = fix_page(p)
+        if diff_template:
             count += 1
             if print_diffs:
-                print(diff)
+                print(diff_template)
         if count >= limit:
             break
 

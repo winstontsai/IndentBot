@@ -11,6 +11,8 @@ import pywikibot as pwb
 import wikitextparser as wtp
 
 from pywikibot import Page, Site, Timestamp
+from pywikibot.exceptions import EditConflictError, OtherPageSaveError
+from pywikibot.exceptions import PageSaveRelatedError
 
 from logger import logger
 from patterns import *
@@ -41,7 +43,7 @@ def visual_lvl(line):
     x = indent_text(line)
     return len(x) + x.count('#')
 
-def subtract_timestamps(x, y):
+def subtract_tstamps(x, y):
     return Timestamp.fromISOformat(x) - Timestamp.fromISOformat(y)
 
 def is_talk_page(ns):
@@ -118,7 +120,7 @@ def fix_extra_indents(lines, initial_pass = False):
         if visual_lvl(l2) - visual_lvl(l1) <= 1:
             continue
 
-        #if extra indent starts from '#' and ends with '*' or '#', then remove one less
+        #if starts from '#' and ends with '*' or '#', remove one less
         # if x and lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
         #     diff -= 1
 
@@ -145,7 +147,7 @@ def fix_indent_style(lines):
         lvl = indent_lvl(line)
         minlvl = min(lvl, prev_lvl)
 
-        #This is necessary when using certain strategies to fix indentation lvls.
+        # necessary when using certain strategies to fix indentation lvls
         minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
         # ignore lines starting with table
@@ -188,9 +190,9 @@ def fix_indent_style(lines):
 def line_partition(text):
     """
     We break on all newlines except those which should not be split on because
-    1) Editors may not want the list to break there, and they logically continue the
-       same list after whatever was introduced on that line
-       (usually using colon indentation), or
+    1) Editors may not want the list to break there, and they logically
+        continue the same list after whatever was introduced on that line
+        (usually using colon indentation), or
     2) Mediawiki doesn't treat it as breaking a list.
 
     So, we break on all newlines EXCEPT
@@ -198,8 +200,10 @@ def line_partition(text):
     2. newlines before templates
     3. newlines before tags
     -----------------------
-    4. newlines immediately followed by a line consisting of spaces and comments
-    5. newlines that are part of a segment of whitespace immediately preceding a category link
+    4. newlines immediately followed by a line consisting of
+        spaces and comments only
+    5. newlines that are part of a segment of whitespace
+        immediately preceding a category link
     6. ?????
     """
     wt = wtp.parse(text)
@@ -217,8 +221,9 @@ def line_partition(text):
         if '\n' in str(x):
             bad_spans.append(x.span)
 
-    # newline followed by line consisting of spaces and comments ONLY doesn't break lines
-    for m in re.finditer(fr'\n *{comment_re}( |{comment_re})*(?=\n)', text, flags=re.S):
+    # newline followed by line consisting of spaces and comments ONLY
+    for m in re.finditer(fr'\n *{comment_re}( |{comment_re})*(?=\n)',
+            text, flags=re.S):
         bad_spans.append(m.span())
 
     # whitespace followed by a Category link doesn't break lines
@@ -315,26 +320,29 @@ def recent_changes(start, end, min_sigs=3):
     spaces = talk_spaces + other_spaces
 
     results = []
+
     # page cache for this function call
     pages = dict()
-    for change in SITE.recentchanges(start=start, end=end, changetype='edit',
-            namespaces=spaces, minor=False, bot=False, redirect=False, reverse=True):
+    for change in SITE.recentchanges(start=start, end=end,
+            changetype='edit', namespaces=spaces,
+            minor=False, bot=False, redirect=False, reverse=True):
         title, ns = change['title'], change['ns']
         revid = change['revid']
         user = change['user']
         comment = change.get('comment', '')
         ts = change['timestamp'] # e.g. 2021-10-19T02:46:45Z
         
-        # stop if IndentBot's talk page has been edited with appropriate edit summary
+        # stop if talk page edited with appropriate edit summary
         if title == 'User talk:IndentBot' and 'STOP' in comment:
-            logger.error(f"STOPPED by [[User:{user}]].\nRevid={revid}\nTimestamp={ts}\nComment={comment}")
+            logger.error((f"STOPPED by [[User:{user}]].\n"
+                "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
             sys.exit(0) # exit 0 so job is not restarted
 
         if should_not_edit(title):
             continue
 
-        # Bytes should increase
-        if change['newlen'] - change['oldlen'] < 42: # 42 is the answer to everything :)
+        # bytes should increase
+        if change['newlen'] - change['oldlen'] < 42:
             continue
 
         # cache Page for this function call
@@ -363,9 +371,9 @@ def recent_changes(start, end, min_sigs=3):
         if not re.search(recent_sig_pat, text):
             continue
 
-        results.append((title, ts, pages[title]))
-    return results
-
+        yield (title, ts, pages[title])
+        #results.append((title, ts, pages[title]))
+    #return results
 
 def continuous_pages_to_check(chunk=3, delay=15):
     """
@@ -375,20 +383,20 @@ def continuous_pages_to_check(chunk=3, delay=15):
     """
     edits = OrderedDict()
     one_sec = timedelta(seconds=1)
-    mindelay = timedelta(minutes=delay)
+    delay = timedelta(minutes=delay)
     old_time = SITE.server_time() - timedelta(minutes=chunk)
 
     while True:
         current_time = SITE.server_time()
         # get new changes
         for title, ts, page in recent_changes(old_time, current_time):
-            if title in edits and subtract_timestamps(ts, edits[title][0]) > mindelay:
+            if title in edits and subtract_tstamps(ts, edits[title][0]) > delay:
                 yield page
             edits[title] = (ts, page)
             edits.move_to_end(title)
 
         # yield pages that have waited long enough
-        cutoff_ts = (current_time - mindelay).isoformat()
+        cutoff_ts = (current_time - delay).isoformat()
         view = edits.values()
         oldest = next(iter(view), None)
         while oldest is not None and oldest[0] <= cutoff_ts:
@@ -415,22 +423,29 @@ def fix_page(page):
     if page.text != new_text:
         page.text = new_text
         try:
-            page.save(summary='Adjusted indentation. See user page and [[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]] for more info.',
+            page.save(summary=('Adjusted indentation. Trial edit. '
+                'See [[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]].'),
                 nocreate=True, minor=False, quiet=True)
             return diff_template(page)
-        # if there's an edit conflict, just ignore
         except pwb.exceptions.EditConflictError:
-            logger.exception(f'Edit conflict for [[{title}]].')
-        # other errors result in exiting
-        except pwb.exceptions.PageSaveRelatedError:
-            logger.exception(f'Save-related error for [[{title}]].')
-            sys.exit(0) # exit 0 so job is not restarted
+            logger.warning(f'Edit conflict for [[{title}]].')
+        except pwb.exceptions.OtherPageSaveError as err:
+            if err.reason.startswith('Editing restricted by {{bots}}'):
+                logger.warning(f'Not allowed to edit [[{title}]].')
+            else:
+                logger.exception(f'Other page save error for [[{title}]].')
+                sys.exit(0)
+        except pwb.exceptions.PageSaveRelatedError as err:
+            logger.exception(f'Save related error for [[{title}]].')
+            sys.exit(0)
         except Exception:
-            logger.exception(f'Other error when saving [[{title}]].')
-            sys.exit(0) # exit 0 so job is not restarted
+            logger.exception(f'Error when saving [[{title}]].')
+            sys.exit(0)
 
-
-def main(limit = None, print_diffs = False):
+def main(limit = None, quiet = True):
+    logger.info('Starting run.')
+    if not quiet:
+        print('Starting run.')
     if limit is None:
         limit = float('inf')
     count = 0
@@ -438,9 +453,13 @@ def main(limit = None, print_diffs = False):
         diff_template = fix_page(p)
         if diff_template:
             count += 1
-            if print_diffs:
+            if not quiet:
                 print(diff_template)
+        elif not quiet:
+            print(f'Failed to save [[{p.title()}]].')
+
         if count >= limit:
+            logger.info('Limit reached.')
             break
 
 if __name__ == "__main__":

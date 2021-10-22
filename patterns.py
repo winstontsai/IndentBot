@@ -114,7 +114,7 @@ outdent_re = template_pattern(construct_redirects(outdent_redirects))
 
 
 if __name__ == "__main__":
-    print(parse_template("{{Outdent|::::|reverse=}}"))
+    pass
 
 
 

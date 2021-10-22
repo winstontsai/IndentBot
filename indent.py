@@ -1,6 +1,5 @@
 # Fix indentation in discussion pages on Wikipedia.
-import logging
-import re
+import regex as re
 import sys
 import time
 
@@ -12,8 +11,10 @@ import pywikibot as pwb
 import wikitextparser as wtp
 
 from pywikibot import Page, Site, Timestamp
-################################################################################
 
+from logger import logger
+from patterns import *
+################################################################################
 SITE = Site('en','wikipedia')
 SITE.login(user='IndentBot')
 
@@ -25,7 +26,6 @@ SIGNATURE_PATTERN = (
     f'({"|".join(m for m in MONTH_TO_INT)}) ' # month name
     r'(2\d{3}) \(UTC\)'                       # yyyy
 )
-
 
 def is_blank_line(line):
     return bool(re.fullmatch(r'\s+', line))
@@ -42,9 +42,25 @@ def visual_lvl(line):
     return len(x) + x.count('#')
 
 def subtract_timestamps(x, y):
-    x = Timestamp.fromISOformat(x)
-    y = Timestamp.fromISOformat(y)
-    return x - y
+    return Timestamp.fromISOformat(x) - Timestamp.fromISOformat(y)
+
+def is_talk_page(ns):
+    return ns % 2 == 1
+
+def has_linebreaking_newline(line):
+    # Return True if line contains "real" line break besides at the end
+    # Considers newlines preceding tables, templates, and tags.
+    pat = r'\n' + f'( |{comment_re})*' + r'(\{[{|]|<[^!])'
+    return bool(re.search(pat, line))
+
+def diff_template(page, title=True):
+    """
+    Return string for Template:Diff2 for the given Page.
+    """
+    x = '{{' + f"Diff2|{page.latest_revision_id}"
+    if title:
+        x += f"|{page.title()}"
+    return x + '}}'
 
 ################################################################################
 # Fix gaps between indented lines
@@ -54,8 +70,9 @@ def fix_gaps(lines, squish=True, single_only=False):
     A gap is a sequence of blank lines.
     Set squish to False to KEEP blank lines preceding a line with indent lvl 1.
     Set single_only to False to remove single-line AND certain multi-line gaps.
+
+    lines argument may be altered.
     """
-    lines = list(lines)
     i, n = 0, len(lines)
     while i < n:
         txt_i = indent_text(lines[i])
@@ -85,8 +102,9 @@ def fix_gaps(lines, squish=True, single_only=False):
 def fix_extra_indents(lines, initial_pass = False):
     """
     Fix extra indentation.
+
+    lines argument may be altered.
     """
-    lines = list(lines)
     lines.insert(0, '\n') # for handling first line edge case
     n = len(lines)
     for i in range(n - 1):
@@ -101,14 +119,14 @@ def fix_extra_indents(lines, initial_pass = False):
             continue
 
         #if extra indent starts from '#' and ends with '*' or '#', then remove one less
-        if x and lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
-            diff -= 1
+        # if x and lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
+        #     diff -= 1
 
         for j in range(i + 1, n):
             l = lines[j]
             if indent_lvl(l) < y:
                 break
-            lines[j] = l[:x] + l[x+diff-1:] # cut l[x:y-1] from indentation
+            lines[j] = l[:x] + l[x + diff - 1:] # cut l[x:y-1] from indentation
     return lines[1:] # don't return the extra line we inserted
 
 ################################################################################
@@ -117,6 +135,8 @@ def fix_indent_style(lines):
     """
     Do not mix indent styles. Each line's indentation style must match
     the most recently used indentation style.
+
+    lines argument may be altered.
     """
     new_lines = []
     prev_lvl = 0
@@ -125,55 +145,52 @@ def fix_indent_style(lines):
         lvl = indent_lvl(line)
         minlvl = min(lvl, prev_lvl)
 
-        # This is only necessary when using certain strategies to fix indentation lvls.
-        # It's a generalization of the naive strategy, but has the same result for most pages.
+        #This is necessary when using certain strategies to fix indentation lvls.
         minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
-        new_prefix = ''
-        p1, p2 = 0, 0
-        while p1 < minlvl and p2 < lvl:
-            c1 = indent_dict[minlvl][p1]
-            c2 = line[p2]
-            if c1 == '#':
-                if p2 <= lvl - 3 and line[p2:p2+2] == '::':
-                    new_prefix += '#'
-                    p2 += 1
-                else:
+        # ignore lines starting with table
+        if re.match(fr':*( |{comment_re})*' + r'\{\|', line):
+            new_indent = line[:lvl] # keep same indent
+        else:
+            new_prefix = ''
+            p1, p2 = 0, 0
+            while p1 < minlvl and p2 < lvl:
+                c1 = indent_dict[minlvl][p1]
+                c2 = line[p2]
+                if c1 == '#':
+                    if p2 <= lvl - 3 and line[p2:p2+2] == '::':
+                        new_prefix += '#'
+                        p2 += 1
+                    else:
+                        new_prefix += c2
+                elif c2 == '#':
                     new_prefix += c2
-            elif c2 == '#':
-                new_prefix += c2
-            else:
-                new_prefix += c1
-            p1 += 1
-            p2 += 1
-        new_indent = new_prefix + line[p2:lvl]
+                else:
+                    new_prefix += c1
+                p1 += 1
+                p2 += 1
+            new_indent = new_prefix + line[p2:lvl]
         new_lines.append(new_indent + line[lvl:])
         indent_dict[len(new_indent)] = new_indent # record style
         prev_lvl = len(new_indent)
+
+        # reset "memory" if list-breaking newline encountered
+        if lvl == 0 or has_linebreaking_newline(new_lines[-1]):
+            indent_dict = {0: ''}
+
     return new_lines
 
 ################################################################################
+# Miscellaneous fixes, on text string
+
+################################################################################
 # Apply the fixes to some text
-def apply_fixes(text):
-    lines = line_partition(text)
-
-    new_lines = fix_gaps(lines)
-    new_lines = fix_extra_indents(new_lines)
-    new_lines = fix_indent_style(new_lines)
-
-    while new_lines != lines:
-        lines = new_lines
-        new_lines = fix_gaps(new_lines)
-        new_lines = fix_extra_indents(new_lines)
-        new_lines = fix_indent_style(new_lines)
-    return ''.join(new_lines)
-
 def line_partition(text):
     """
     We break on all newlines except those which should not be split on because
-    1) Editors may not want the list to break there, and logically continue the
+    1) Editors may not want the list to break there, and they logically continue the
        same list after whatever was introduced on that line
-       (usually with colon indentation), or
+       (usually using colon indentation), or
     2) Mediawiki doesn't treat it as breaking a list.
 
     So, we break on all newlines EXCEPT
@@ -186,12 +203,13 @@ def line_partition(text):
     6. ?????
     """
     wt = wtp.parse(text)
-
     bad_spans = []
+
     for x in wt.tables + wt.templates + wt.get_tags():
         i, j = x.span
-        if i - 1 >= 0 and text[i - 1] == '\n':
-            i -= 1
+        m = re.search(fr'\n( |{comment_re})*\Z', text[:i])
+        if m:
+            i = m.start()
         if '\n' in text[i:j]:
             bad_spans.append((i, j))
 
@@ -199,8 +217,8 @@ def line_partition(text):
         if '\n' in str(x):
             bad_spans.append(x.span)
 
-    # newline followed by line consisting of spaces and comments only doesn't break lines
-    for m in re.finditer(r'\n *<!--(.(?<!-->))*?-->(<!--(.(?<!-->))*?-->| )*(?=\n)', text, flags=re.S):
+    # newline followed by line consisting of spaces and comments ONLY doesn't break lines
+    for m in re.finditer(fr'\n *{comment_re}( |{comment_re})*(?=\n)', text, flags=re.S):
         bad_spans.append(m.span())
 
     # whitespace followed by a Category link doesn't break lines
@@ -211,48 +229,127 @@ def line_partition(text):
     # now partition into lines
     prev, lines = 0, []
     for i, c in enumerate(text):
-        if c == '\n' and not any(start<=i<end for start, end in bad_spans):
+        if c == '\n' and not any(in_subspan(i, span) for span in bad_spans):
             lines.append(text[prev:i + 1])
             prev = i + 1
     lines.append(text[prev:]) # since Wikipedia strips newlines from the end
     #print(lines)
     return lines
 
+
+def fix_text(text):
+    lines = line_partition(text)
+
+    new_lines = fix_gaps(lines)
+    new_lines = fix_extra_indents(new_lines)
+    new_lines = fix_indent_style(new_lines)
+
+    while new_lines != lines:
+        lines = list(new_lines)
+        new_lines = fix_gaps(new_lines)
+        new_lines = fix_extra_indents(new_lines)
+        new_lines = fix_indent_style(new_lines)
+
+    text = ''.join(new_lines)
+    return text
+
+def fix_text2(text):
+    lines = line_partition(text)
+
+    new_lines = fix_gaps(lines)
+    new_lines = fix_extra_indents(new_lines)
+    new_lines = fix_indent_style2(new_lines)
+
+    while new_lines != lines:
+        lines = list(new_lines)
+        new_lines = fix_gaps(new_lines)
+        new_lines = fix_extra_indents(new_lines)
+        new_lines = fix_indent_style2(new_lines)
+
+    text = ''.join(new_lines)
+    return text
+
+
+
 ################################################################################
 # Create continuous generator of pages to edit
-def recent_changes(start, end):
+def is_sandbox(title):
+    """
+    Return True if it's a sandbox.
+    """
+    sandboxes = ['Wikipedia:Sandbox', 'Wikipedia talk:Sandbox',
+        'User talk:Sandbox', 'User talk:Sandbox for user warnings',
+        'Wikipedia:Articles for creation/AFC sandbox',
+        'User:Sandbox']
+    if title in sandboxes:
+        return True
+
+    if re.search(r'/[sS]andbox(?: ?\d+)?(?:/|\Z)', title):
+        return True
+    return False
+
+def has_bad_prefix(title):
+    """
+    Filter out pages which shouldn't be edited. Generally, these are groups
+    of pages with lots of edge cases.
+    """
+    prefixes = ['Wikipedia:Templates for discussion/', ]
+    return any(title.startswith(x) for x in prefixes)
+
+def is_valid_template_page(title):
+    """
+    Get valid template pages
+    """
+    p = ['Template:Did you know nominations/', ]
+    return any(title.startswith(x) for x in p)
+
+def recent_changes(start, end, min_sigs=3):
     talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
     other_spaces = [4, 10]
     spaces = talk_spaces + other_spaces
 
-    # prefixes for edge case discussion pages
-    page_prefixes = ['Template:Did you know nominations/', ]
-
-    pagetexts = dict()
+    # page cache for this function call
+    pages = dict()
     for change in SITE.recentchanges(start=start, end=end, changetype='edit',
             namespaces=spaces, minor=False, bot=False, redirect=False, reverse=True):
-        title = change['title']
+        title, ns = change['title'], change['ns']
+        revid = change['revid']
+        user = change['user']
+        comment = change.get('comment', '')
+        ts = change['timestamp'] # e.g. 2021-10-19T02:46:45Z
+        
+        # stop if IndentBot's talk page has been edited with appropriate edit summary
+        if title == 'User talk:IndentBot' and 'STOP' in comment:
+            logger.error(f"STOPPED by [[User:{user}]].\nRevid={revid}\nTimestamp={ts}\nComment={comment}")
+            sys.exit(0) # exit 0 so job is not restarted
+
+        if is_sandbox(title) or has_bad_prefix(title):
+            continue
 
         # Edge case namespaces
-        if change['ns'] == 10:
-            if not any(title.startswith(prefix) for prefix in page_prefixes):
-                continue
-
-        # stop if IndentBot's talk page has been edited with appropriate edit summary
-        if title == 'User talk:IndentBot' and 'STOP' in change.get('comment', ''):
-            logger.error(f"Stopped by {change['user']} with edit to talk page. Revid {change['revid']}.")
-            sys.exit(0)
+        if ns == 10 and not is_valid_template_page(title):
+            continue
 
         # Bytes should increase
         if change['newlen'] - change['oldlen'] < 42: # 42 is the answer to everything :)
             continue
 
-        # check for signature with matching timestamp
-        # cache page text
-        if title not in pagetexts:
-            pagetexts[title] = Page(SITE, title).text
-        text = pagetexts[title]
-        ts = change['timestamp'] # e.g. 2021-10-19T02:46:45Z
+        # cache Page for this function call
+        if title not in pages:
+            pages[title] = Page(SITE, title)
+        text = pages[title].text
+
+        # check for a few signatures if not a talk page
+        if not is_talk_page(ns):
+            signatures = set()
+            for m in re.finditer(SIGNATURE_PATTERN, text):
+                signatures.add(m[0])
+                if len(signatures) >= min_sigs:
+                    break
+            else:
+                continue
+
+        # always check for signature with matching timestamp, regardless of namespace
         recent_sig_pat = (
             r'\[\[[Uu]ser(?: talk)?:[^\n]+?'   # user link
             fr'{ts[11:13]}:{ts[14:16]}, '      # hh:mm
@@ -260,84 +357,85 @@ def recent_changes(start, end):
             fr'{month_name[int(ts[5:7])]} '    # month name
             fr'{ts[:4]} \(UTC\)'               # yyyy
         )
-        # check for at least a few signatures
         if not re.search(recent_sig_pat, text):
             continue
-        for count, m in enumerate(re.finditer(SIGNATURE_PATTERN, text), start=1):
-            if count >= 2:
-                break
-        else:
-            continue
-        yield (title, ts)
 
-def continuous_pages_to_check(chunk=2, delay=10):
+        yield (title, ts, pages[title])
+
+def continuous_pages_to_check(chunk=3, delay=15):
     """
     Check recent changes in intervals of chunk minutes (plus processing time).
     Give at least delay minutes of buffer time before editing.
-    Should have chunk <= .2 * delay.
+    Should have chunk <= delay / 5.
     """
     edits = OrderedDict()
-    delay, one_sec = timedelta(minutes=delay), timedelta(seconds=1)
+    one_sec = timedelta(seconds=1)
+    mindelay = timedelta(minutes=delay)
     old_time = SITE.server_time() - timedelta(minutes=chunk)
+
     while True:
         current_time = SITE.server_time()
         # get new changes
-        for title, ts in recent_changes(old_time+one_sec, current_time):
-            if title in edits and subtract_timestamps(ts, edits[title]) > delay:
-                yield Page(SITE, title)
-            edits[title] = ts
+        for title, ts, page in recent_changes(old_time, current_time):
+            if title in edits and subtract_timestamps(ts, edits[title][0]) > mindelay:
+                yield page
+            edits[title] = (ts, page)
             edits.move_to_end(title)
 
         # yield pages that have waited long enough
-        cutoff_ts = (current_time - delay).isoformat()
-        item_view = edits.items()
-        oldest = next(iter(item_view), None)
-        while oldest is not None and oldest[1] <= cutoff_ts:
-            yield Page(SITE, oldest[0])
+        cutoff_ts = (current_time - mindelay).isoformat()
+        view = edits.values()
+        oldest = next(iter(view), None)
+        while oldest is not None and oldest[0] <= cutoff_ts:
+            yield oldest[1]
             edits.popitem(last=False)
-            oldest = next(iter(item_view), None)
-        old_time = current_time
-        time.sleep(chunk * 60)
+            oldest = next(iter(view), None)
+
+        old_time = current_time + one_sec
+        time.sleep(chunk*60)
 
 ################################################################################
 # Function to fix and save a page, and main function to run continuous program.
 def fix_page(page):
     """
-    Apply fixes to a page and save it.
+    Apply fixes to a page and save it if there was a change in the text.
+    If no exception occurs on the save, return a string for Template:Diff2.
+    Returns false if there is no change or there is an exception on save.
     """
     if type(page) == str:
         page = Page(SITE, page)
-    new_text = apply_fixes(page.text)
-    if page.text != new_text:
+    title = page.title()
+
+    old_text = page.get(force=True) # GET LATEST VERSION OF PAGE
+    new_text = fix_text(old_text)
+
+    if old_text != new_text:
         page.text = new_text
         try:
-            page.save(summary='Adjusting indentation. Test edit. See the [[Wikipedia:Bots/Requests for approval/IndentBot|request for approval]] and report issues there.',
-                minor=True, nocreate=True)
-            return True
-        except pwb.exceptions.PageSaveRelatedError as e:
-            logger.exception('Save related error.')
-        except Exception as e:
-            logger.exception('Other error on save.')
-            sys.exit(0)
-    return False
+            page.save(summary='Adjusted indentation. See user page and [[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]] for more info.',
+                nocreate=True, minor=False, quiet=True)
+            return diff_template(page)
+        except pwb.exceptions.PageSaveRelatedError as err:
+            logger.exception(f'Save-related error for [[{title}]].')
+        except Exception as err:
+            logger.exception(f'Other error when saving [[{title}]].')
+            sys.exit(0) # exit 0 so job is not restarted
 
-def main(limit = None):
+
+def main(limit = None, print_diff = False):
     if limit is None:
         limit = float('inf')
     count = 0
     for p in continuous_pages_to_check():
-        count += fix_page(p)
+        diff = fix_page(p)
+        if diff:
+            count += 1
+            if print_diff:
+                print(diff)
         if count >= limit:
             break
 
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
-    file_handler = logging.FileHandler(filename = "logs/indentbot.log")
-    formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.INFO)
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-
-    print('main')
+    pass
+    #main(50, True)
 

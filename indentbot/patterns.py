@@ -109,18 +109,23 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 
 
 ##############################################################################
-# Storage for strings
+# Storage
 ##############################################################################
-BAD_PREFIXES = ['Wikipedia:Templates for discussion/', ]
+# Talk, User talk, Wikipedia talk, File talk, Mediawiki talk,
+# Template talk, Help talk, Category talk, Portal talk, Draft talk,
+# TimedText talk, Module talk
+TALK_SPACES = (1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829)
+OTHER_SPACES = (4, 10)
+# Wikipedia, Template
+NAMESPACES = TALK_SPACES + OTHER_SPACES
 
-SANDBOXES = ['Wikipedia:Sandbox', 'Wikipedia talk:Sandbox',
+BAD_PREFIXES = ('Wikipedia:Templates for discussion/', )
+
+SANDBOXES = ('Wikipedia:Sandbox', 'Wikipedia talk:Sandbox',
     'User talk:Sandbox', 'User talk:Sandbox for user warnings',
     'Wikipedia:Articles for creation/AFC sandbox',
-    'User:Sandbox']
-
+    'User:Sandbox')
 
 if __name__ == "__main__":
     pass
-
-
 

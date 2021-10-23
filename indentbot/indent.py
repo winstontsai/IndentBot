@@ -17,7 +17,7 @@ from pywikibot.exceptions import PageSaveRelatedError
 
 import patterns
 
-from patterns import BAD_PREFIXES, COMMENT_RE, SANDBOXES
+from patterns import BAD_PREFIXES, COMMENT_RE, NAMESPACES, SANDBOXES
 from patterns import in_subspan
 ################################################################################
 logger = logging.getLogger('indentbot_logger')
@@ -291,7 +291,6 @@ def is_sandbox(title):
         return True
     return False
 
-
 def is_valid_template_page(title):
     """
     Only edit certain template pages. An "opt-in" for the template namespace.
@@ -318,15 +317,11 @@ def should_not_edit(title):
 def recent_changes(start, end, min_sigs=3):
     logger.info('Retrieving pages from {} to {}.'.format(start, end))
 
-    talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
-    other_spaces = [4, 10]
-    spaces = talk_spaces + other_spaces
-
     # page cache for this function call
     pages = dict()
 
     for change in SITE.recentchanges(start=start, end=end, reverse=True,
-            changetype='edit', namespaces=spaces,
+            changetype='edit', namespaces=NAMESPACES,
             minor=False, bot=False, redirect=False):
         title, ns = change['title'], change['ns']
         revid = change['revid']
@@ -387,9 +382,9 @@ def continuous_pages_to_check(chunk, delay):
     old_time = SITE.server_time() - timedelta(minutes=chunk)
 
     while True:
+        loop_start_time = time.perf_counter()
         current_time = SITE.server_time()
-        t1 = time.perf_counter()
-        # get new changes, attach to edits queue on the right
+        # get new changes, append to edits dict
         for title, ts, page in recent_changes(old_time, current_time):
             edits[title] = (ts, page)
             edits.move_to_end(title)
@@ -398,14 +393,14 @@ def continuous_pages_to_check(chunk, delay):
         cutoff_ts = (current_time - delay).isoformat()
         view = edits.items()
         oldest = next(iter(view), None)
+        # check if oldest is past the cutoff
         while oldest is not None and oldest[1][0] <= cutoff_ts:
             yield oldest[1][1]     # yield Page object
             del edits[oldest[0]]
             oldest = next(iter(view), None)
 
         old_time = current_time + one_sec
-        t2 = time.perf_counter()
-        time.sleep(chunk*60 - (t2 - t1))
+        time.sleep(chunk*60 - (time.perf_counter()-loop_start_time))
 
 ################################################################################
 # Function to fix and save a page, and main function to run continuous program.
@@ -418,7 +413,7 @@ def fix_page(page):
     if type(page) == str:
         page = Page(SITE, page)
     title = page.title(as_link=True)
-    # fix latest version so no edit conflict
+    # get latest version so that there is likely no edit conflict
     new_text = fix_text(page.get(force=True)) 
     if page.text != new_text:
         page.text = new_text
@@ -427,28 +422,24 @@ def fix_page(page):
                 'See [[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]].'),
                 nocreate=True, minor=False, quiet=True)
             return diff_template(page)
-        except pwb.exceptions.EditConflictError:
+        except EditConflictError:
             logger.warning('Edit conflict for {}.'.format(title))
-        except pwb.exceptions.OtherPageSaveError as err:
+        except OtherPageSaveError as err:
             if err.reason.startswith('Editing restricted by {{bots}}'):
                 logger.warning('Not allowed to edit {}.'.format(title))
             else:
                 logger.exception('Other page save error for {}.'.format(title))
                 sys.exit(0)
-        except pwb.exceptions.PageSaveRelatedError as err:
+        except PageSaveRelatedError:
             logger.exception('Save related error for {}.'.format(title))
             sys.exit(0)
         except Exception:
             logger.exception('Unknown error when saving {}.'.format(title))
             sys.exit(0)
 
-def main(chunk = 2, delay = 10, limit = None, quiet = True):
+def main(chunk, delay, limit = float('inf'), quiet = True):
     logger.info('Starting run.')
     t1 = time.perf_counter()
-
-    if limit is None:
-        limit = float('inf')
-
     count = 0
     for p in continuous_pages_to_check(chunk=chunk, delay=delay):
         diff_template = fix_page(p)

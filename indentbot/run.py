@@ -8,26 +8,27 @@ from pathlib import Path
 import indent
 
 def get_args():
-    parser = argparse.ArgumentParser(description = 'Bot that helps maintain consistent and correct indentation in discussion pages on Wikipedia.')
+    parser = argparse.ArgumentParser(
+        description = ('Bot that helps maintain consistent and correct '
+            'indentation in discussion pages on Wikipedia.'))
     parser.add_argument('-c', '--chunk', type=int, default=2,
-        help='minutes between recent changes checkpoints')
+        help='minutes between recent changes checkpoints (default: 2)')
     parser.add_argument('-d', '--delay', type=int, default=10,
-        help='buffer time in minutes before a page can be edited')
-
-    parser.add_argument('-l', '--logfile', help='file to store logs in')
+        help='minimum buffer time in minutes before editing a page (default: 10)')
+    parser.add_argument('-l', '--logfile',
+        help='log file (default: $HOME/logs/indentbot.log)')
     parser.add_argument('-t', '--total', type=int,
-        help='maximum number of edits to make')
-
+        help='maximum number of edits to make (default: no limit)', default=float('inf'))
     parser.add_argument('-v', '--verbose', action='store_true',
-        help='print links to the diffs using {{Diff2}}')
+        help='acknowledge successful edits by printing a {{Diff2}} transclution')
     return parser.parse_args()
 
-def set_up_logging(logfile = None):
+def set_up_logging(logfile):
     """
-    Set up log file at given location, otherwise logs are stored in
+    Set up log file at the given location, otherwise logs are stored in
     $HOME/logs/indentbot.log.
     The directory
-    $HOME/logs/
+    $HOME/logs
     will be created if it does not exist.
     """
     logger = logging.getLogger('indentbot_logger')
@@ -53,7 +54,6 @@ def run():
     # indent.main(chunk=args.chunk, delay=args.delay,
     #     limit=args.limit, quiet=not args.verbose)
 
-
-
 if __name__ == '__main__':
     run()
+

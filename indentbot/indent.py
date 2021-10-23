@@ -4,34 +4,21 @@ import regex as re
 import sys
 import time
 
-from calendar import month_name
 from collections import OrderedDict
 from datetime import datetime, timedelta
 
 import pywikibot as pwb
 import wikitextparser as wtp
 
-from pywikibot import Page, Site, Timestamp
+from pywikibot import Page, Site, Timestamp, User
 from pywikibot.exceptions import EditConflictError, OtherPageSaveError
 from pywikibot.exceptions import PageSaveRelatedError
 
-import patterns
-
-from patterns import BAD_PREFIXES, COMMENT_RE, NAMESPACES, SANDBOXES
-from patterns import in_subspan
+from patterns import *
 ################################################################################
 logger = logging.getLogger('indentbot_logger')
 SITE = Site('en','wikipedia')
 SITE.login(user='IndentBot')
-
-MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
-SIGNATURE_PATTERN = (
-    r'\[\[[Uu]ser(?: talk)?:[^\n]+?' +                  # user page link
-    r'([0-2]\d):([0-5]\d), ' +                          # hh:mm
-    r'([1-3]?\d) ' +                                    # day
-    '(' + "|".join(m for m in MONTH_TO_INT) + ') ' +    # month name
-    r'(2\d{3}) \(UTC\)'                                 # yyyy
-)
 
 def is_blank_line(line):
     return bool(re.fullmatch(r'\s+', line))
@@ -331,9 +318,11 @@ def recent_changes(start, end, min_sigs=3):
         
         # stop if talk page edited with appropriate edit summary
         if title == 'User talk:IndentBot' and 'STOP' in comment:
-            logger.error(("STOPPED by [[User:" + user + "]].\n"
-                "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
-            sys.exit(0)
+            groups = User(SITE, user).groups()
+            if 'autoconfirmed' in groups or 'confirmed' in groups:
+                logger.error(("STOPPED by [[User:" + user + "]].\n"
+                    "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
+                sys.exit(0)
 
         if should_not_edit(title):
             continue
@@ -418,8 +407,7 @@ def fix_page(page):
     if page.text != new_text:
         page.text = new_text
         try:
-            page.save(summary=('Adjusted indentation. Trial edit. '
-                'See [[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]].'),
+            page.save(summary=EDIT_SUMMARY,
                 nocreate=True, minor=False, quiet=True)
             return diff_template(page)
         except EditConflictError:
@@ -455,7 +443,7 @@ def main(chunk, delay, limit = float('inf'), quiet = True):
             break
 
     t2 = time.perf_counter()
-    logger.info('Ending run. Time elapsed = {} seconds.'.format(t2-t1))
+    logger.info('Ending run. Time elapsed = {} seconds.'.format(t2 - t1))
 
 if __name__ == "__main__":
     pass

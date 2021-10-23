@@ -1,6 +1,8 @@
 # This module defines some reusable regexes/patterns, and some helper functions.
 ################################################################################
 import regex as re
+
+from calendar import month_name
 ################################################################################
 def pattern_count(pattern, text, flags=0):
     return sum(1 for x in re.finditer(pattern, text, flags))
@@ -107,10 +109,20 @@ def construct_template(name, d):
 ##############################################################################
 COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 
-
 ##############################################################################
 # Storage
 ##############################################################################
+EDIT_SUMMARY = ('Adjusted indentation. Trial edit. '
+    'See [[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]].')
+
+MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
+SIGNATURE_PATTERN = (
+    r'\[\[[Uu]ser(?: talk)?:[^\n]+?' +                  # user page link
+    r'([0-2]\d):([0-5]\d), ' +                          # hh:mm
+    r'([1-3]?\d) ' +                                    # day
+    '(' + "|".join(m for m in MONTH_TO_INT) + ') ' +    # month name
+    r'(2\d{3}) \(UTC\)'                                 # yyyy
+)
 # Talk, User talk, Wikipedia talk, File talk, Mediawiki talk,
 # Template talk, Help talk, Category talk, Portal talk, Draft talk,
 # TimedText talk, Module talk

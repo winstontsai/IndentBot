@@ -1,4 +1,5 @@
 # Fix indentation in discussion pages on Wikipedia.
+import logging
 import regex as re
 import sys
 import time
@@ -16,10 +17,10 @@ from pywikibot.exceptions import PageSaveRelatedError
 
 import patterns
 
-from logger import logger
 from patterns import BAD_PREFIXES, COMMENT_RE, SANDBOXES
 from patterns import in_subspan
 ################################################################################
+logger = logging.getLogger('indentbot_logger')
 SITE = Site('en','wikipedia')
 SITE.login(user='IndentBot')
 
@@ -315,6 +316,8 @@ def should_not_edit(title):
     return False
 
 def recent_changes(start, end, min_sigs=3):
+    logger.info(f'Retrieving pages from {start} to {end}.')
+
     talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
     other_spaces = [4, 10]
     spaces = talk_spaces + other_spaces
@@ -335,12 +338,12 @@ def recent_changes(start, end, min_sigs=3):
         if title == 'User talk:IndentBot' and 'STOP' in comment:
             logger.error((f"STOPPED by [[User:{user}]].\n"
                 "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
-            sys.exit(0) # exit 0 so job is not restarted
+            sys.exit(0)
 
         if should_not_edit(title):
             continue
 
-        # bytes should increase
+        # bytes should increase some amount, e.g. at least a signature size
         if change['newlen'] - change['oldlen'] < 42:
             continue
 
@@ -372,9 +375,9 @@ def recent_changes(start, end, min_sigs=3):
 
         yield (title, ts, pages[title])
 
-def continuous_pages_to_check(chunk=3, delay=15):
+def continuous_pages_to_check(chunk, delay):
     """
-    Check recent changes in intervals of chunk minutes (plus processing time).
+    Check recent changes in intervals of chunk minutes.
     Give at least delay minutes of buffer time before editing.
     Should have chunk <= delay / 5.
     """
@@ -385,24 +388,24 @@ def continuous_pages_to_check(chunk=3, delay=15):
 
     while True:
         current_time = SITE.server_time()
-        # get new changes
+        t1 = time.perf_counter()
+        # get new changes, attach to edits queue on the right
         for title, ts, page in recent_changes(old_time, current_time):
-            if title in edits and subtract_tstamps(ts, edits[title][0]) > delay:
-                yield page
             edits[title] = (ts, page)
             edits.move_to_end(title)
 
         # yield pages that have waited long enough
         cutoff_ts = (current_time - delay).isoformat()
-        view = edits.values()
+        view = edits.items()
         oldest = next(iter(view), None)
-        while oldest is not None and oldest[0] <= cutoff_ts:
-            yield oldest[1]
-            edits.popitem(last=False)
+        while oldest is not None and oldest[1][0] <= cutoff_ts:
+            yield oldest[1][1]     # yield Page object
+            del edits[oldest[0]]
             oldest = next(iter(view), None)
 
         old_time = current_time + one_sec
-        time.sleep(chunk*60)
+        t2 = time.perf_counter()
+        time.sleep(chunk*60 - (t2 - t1))
 
 ################################################################################
 # Function to fix and save a page, and main function to run continuous program.
@@ -414,7 +417,7 @@ def fix_page(page):
     """
     if type(page) == str:
         page = Page(SITE, page)
-    title = page.title()
+    title = page.title(as_link=True)
     # fix latest version so no edit conflict
     new_text = fix_text(page.get(force=True)) 
     if page.text != new_text:
@@ -425,39 +428,43 @@ def fix_page(page):
                 nocreate=True, minor=False, quiet=True)
             return diff_template(page)
         except pwb.exceptions.EditConflictError:
-            logger.warning(f'Edit conflict for [[{title}]].')
+            logger.warning(f'Edit conflict for {title}.')
         except pwb.exceptions.OtherPageSaveError as err:
             if err.reason.startswith('Editing restricted by {{bots}}'):
-                logger.warning(f'Not allowed to edit [[{title}]].')
+                logger.warning(f'Not allowed to edit {title}.')
             else:
-                logger.exception(f'Other page save error for [[{title}]].')
+                logger.exception(f'Other page save error for {title}.')
                 sys.exit(0)
         except pwb.exceptions.PageSaveRelatedError as err:
-            logger.exception(f'Save related error for [[{title}]].')
+            logger.exception(f'Save related error for {title}.')
             sys.exit(0)
         except Exception:
-            logger.exception(f'Unknown error when saving [[{title}]].')
+            logger.exception(f'Unknown error when saving {title}.')
             sys.exit(0)
 
-def main(limit = None, quiet = True):
+def main(chunk = 2, delay = 10, limit = None, quiet = True):
     logger.info('Starting run.')
-    if not quiet:
-        print('Starting run.')
+    t1 = time.perf_counter()
+
     if limit is None:
         limit = float('inf')
+
     count = 0
-    for p in continuous_pages_to_check():
+    for p in continuous_pages_to_check(chunk=chunk, delay=delay):
         diff_template = fix_page(p)
         if diff_template:
             count += 1
             if not quiet:
                 print(diff_template)
         elif not quiet:
-            print(f'Failed to save [[{p.title()}]].')
+            print(f'Failed to save {p.title(as_link=True)}.')
 
         if count >= limit:
             logger.info('Limit reached.')
             break
+
+    t2 = time.perf_counter()
+    logger.info(f'Ending run. Time elapsed = {t2-t1} seconds.')
 
 if __name__ == "__main__":
     pass

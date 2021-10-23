@@ -26,7 +26,9 @@ def set_up_logging(logfile = None):
     """
     Set up log file at given location, otherwise logs are stored in
     $HOME/logs/indentbot.log.
-    The directory logs will be created if it does not exist.
+    The directory
+    $HOME/logs/
+    will be created if it does not exist.
     """
     logger = logging.getLogger('indentbot_logger')
     if logfile is None:
@@ -44,8 +46,14 @@ def set_up_logging(logfile = None):
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
-if __name__ == '__main__':
-    set_up_logging()
+def run():
     args = get_args()
+    set_up_logging(logfile = args.logfile)
     print(args)
-    #indent.main(limit=args.limit, quiet=not args.verbose)
+    # indent.main(chunk=args.chunk, delay=args.delay,
+    #     limit=args.limit, quiet=not args.verbose)
+
+
+
+if __name__ == '__main__':
+    run()

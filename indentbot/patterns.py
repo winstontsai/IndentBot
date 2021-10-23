@@ -48,7 +48,7 @@ def in_subspan(i, span):
 # Helper functions for making regular expressions
 ##############################################################################
 def alternates(l):
-    return f'(?:{"|".join(l)})'
+    return '(?:' + "|".join(l) + '})'
 
 def template_pattern(name, disambiguator = ''):
     """
@@ -58,7 +58,7 @@ def template_pattern(name, disambiguator = ''):
     disambiguator = str(disambiguator) # used to prevent duplicate group names
     z = ''.join(x for x in name if x.isalpha())[:20] + str(len(name)) + disambiguator
     t = r'(?P<template_' + z + r'>{{(?:[^}{]|(?&template_' + z + r'))*}})'
-    return '{{' + fr'\s*{name}\s*(?:\|(?:[^}}{{]|{t})*)?' + '}}'
+    return r'{{\s*' + name + r'\s*(?:\|(?:[^}}{{]|{t})*)?' + '}}'
 
 def construct_redirects(l):
     """
@@ -95,10 +95,10 @@ def construct_template(name, d):
     named = ''
     for k, v in sorted(d.items()):
         if re.fullmatch(r"[1-9][0-9]*", k):
-            positional += f"|{v}"
+            positional += "|{}".format(v)
     for k, v in d.items():
         if not re.fullmatch(r"[1-9][0-9]*", k):
-            named += f"|{k}={v}"
+            named += "|{}={}".format(k, v)
     return '{{' + name + positional + named + '}}'
 
 

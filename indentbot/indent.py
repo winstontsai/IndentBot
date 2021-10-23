@@ -26,11 +26,11 @@ SITE.login(user='IndentBot')
 
 MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
 SIGNATURE_PATTERN = (
-    r'\[\[[Uu]ser(?: talk)?:[^\n]+?'          # user page link
-    r'([0-2]\d):([0-5]\d), '                  # hh:mm
-    r'([1-3]?\d) '                            # day
-    f'({"|".join(m for m in MONTH_TO_INT)}) ' # month name
-    r'(2\d{3}) \(UTC\)'                       # yyyy
+    r'\[\[[Uu]ser(?: talk)?:[^\n]+?' +                  # user page link
+    r'([0-2]\d):([0-5]\d), ' +                          # hh:mm
+    r'([1-3]?\d) ' +                                    # day
+    '(' + "|".join(m for m in MONTH_TO_INT) + ') ' +    # month name
+    r'(2\d{3}) \(UTC\)'                                 # yyyy
 )
 
 def is_blank_line(line):
@@ -56,16 +56,16 @@ def is_talk_page(ns):
 def has_linebreaking_newline(line):
     # Return True if line contains "real" line break besides at the end
     # Considers newlines preceding tables, templates, and tags.
-    pat = r'\n' + f'( |{COMMENT_RE})*' + r'(\{[{|]|<[^!])'
+    pat = '\n( |' + COMMENT_RE + r')*(\{[{|]|<[^!])'
     return bool(re.search(pat, line))
 
 def diff_template(page, title=True):
     """
     Return string for Template:Diff2 for the given Page.
     """
-    x = '{{' + f"Diff2|{page.latest_revision_id}"
+    x = '{{Diff2|' + str(page.latest_revision_id)
     if title:
-        x += f"|{page.title()}"
+        x += '|' + page.title()
     return x + '}}'
 
 ################################################################################
@@ -316,7 +316,7 @@ def should_not_edit(title):
     return False
 
 def recent_changes(start, end, min_sigs=3):
-    logger.info(f'Retrieving pages from {start} to {end}.')
+    logger.info('Retrieving pages from {} to {}.'.format(start, end))
 
     talk_spaces = [1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829]
     other_spaces = [4, 10]
@@ -336,7 +336,7 @@ def recent_changes(start, end, min_sigs=3):
         
         # stop if talk page edited with appropriate edit summary
         if title == 'User talk:IndentBot' and 'STOP' in comment:
-            logger.error((f"STOPPED by [[User:{user}]].\n"
+            logger.error(("STOPPED by [[User:" + user + "]].\n"
                 "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
             sys.exit(0)
 
@@ -428,18 +428,18 @@ def fix_page(page):
                 nocreate=True, minor=False, quiet=True)
             return diff_template(page)
         except pwb.exceptions.EditConflictError:
-            logger.warning(f'Edit conflict for {title}.')
+            logger.warning('Edit conflict for {}.'.format(title))
         except pwb.exceptions.OtherPageSaveError as err:
             if err.reason.startswith('Editing restricted by {{bots}}'):
-                logger.warning(f'Not allowed to edit {title}.')
+                logger.warning('Not allowed to edit {}.'.format(title))
             else:
-                logger.exception(f'Other page save error for {title}.')
+                logger.exception('Other page save error for {}.'.format(title))
                 sys.exit(0)
         except pwb.exceptions.PageSaveRelatedError as err:
-            logger.exception(f'Save related error for {title}.')
+            logger.exception('Save related error for {}.'.format(title))
             sys.exit(0)
         except Exception:
-            logger.exception(f'Unknown error when saving {title}.')
+            logger.exception('Unknown error when saving {}.'.format(title))
             sys.exit(0)
 
 def main(chunk = 2, delay = 10, limit = None, quiet = True):
@@ -457,14 +457,14 @@ def main(chunk = 2, delay = 10, limit = None, quiet = True):
             if not quiet:
                 print(diff_template)
         elif not quiet:
-            print(f'Failed to save {p.title(as_link=True)}.')
+            print('Failed to save {}.'.format(p.title(as_link=True)))
 
         if count >= limit:
             logger.info('Limit reached.')
             break
 
     t2 = time.perf_counter()
-    logger.info(f'Ending run. Time elapsed = {t2-t1} seconds.')
+    logger.info('Ending run. Time elapsed = {} seconds.'.format(t2-t1))
 
 if __name__ == "__main__":
     pass

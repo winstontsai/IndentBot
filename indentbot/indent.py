@@ -153,7 +153,7 @@ def fix_indent_style(lines):
         minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
         # don't change style of lines starting with a table
-        if re.match(fr':*( |{COMMENT_RE})*' + r'\{\|', line):
+        if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
             new_indent = old_indent
         # don't change style if it's a small notice indented with a colon
         elif re.match(r': ?<small[^>]*> ?Note:', line):
@@ -207,7 +207,7 @@ def fix_indent_style(lines):
 #         minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
 #         # don't change style of lines starting with a table
-#         if re.match(fr':*( |{COMMENT_RE})*' + r'\{\|', line):
+#         if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
 #             new_indent = old_indent
 #         else:
 #             new_prefix = ''
@@ -265,7 +265,7 @@ def line_partition(text):
 
     for x in wt.tables + wt.templates + wt.get_tags():
         i, j = x.span
-        m = re.search(fr'\n( |{COMMENT_RE})*\Z', text[:i])
+        m = re.search(r'\n( |{})*\Z'.format(COMMENT_RE), text[:i])
         if m:
             i = m.start()
         if '\n' in text[i:j]:
@@ -276,7 +276,8 @@ def line_partition(text):
             bad_spans.append(x.span)
 
     # newline followed by line consisting of spaces and comments ONLY
-    for m in re.finditer(fr'\n *{COMMENT_RE}( |{COMMENT_RE})*(?=\n)',
+    for m in re.finditer(
+            r'\n *{}( |{})*(?=\n)'.format(COMMENT_RE, COMMENT_RE),
             text, flags=re.S):
         bad_spans.append(m.span())
 
@@ -411,11 +412,11 @@ def recent_changes(start, end, min_sigs=3):
                 continue
         # Always check for signature with matching timestamp.
         recent_sig_pat = (
-            r'\[\[[Uu]ser(?: talk)?:[^\n]+?'   # user link
-            fr'{ts[11:13]}:{ts[14:16]}, '      # hh:mm
-            fr'{ts[8:10].lstrip("0")} '        # day
-            fr'{month_name[int(ts[5:7])]} '    # month name
-            fr'{ts[:4]} \(UTC\)'               # yyyy
+            r'\[\[[Uu]ser(?: talk)?:[^\n]+?'             # user link
+            + r'{}:{}, '.format(ts[11:13], ts[14:16])    # hh:mm
+            + r'{} '.format(ts[8:10].lstrip("0"))        # day
+            + r'{} '.format(month_name[int(ts[5:7])])    # month name
+            + r'{} \(UTC\)'.format(ts[:4])               # yyyy
         )
         if not re.search(recent_sig_pat, text):
             continue

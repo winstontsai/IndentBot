@@ -78,7 +78,7 @@ def construct_redirects(l):
     For example, if we want to match both "Rotten Tomatoes" and "RottenTomatoes",
     use this function with l = ["Rotten Tomatoes", "RottenTomatoes"]
     """
-    redirects = [fr"[{x[0].upper() + x[0].lower()}]{x[1:]}" for x in l]
+    redirects = [r"[{}]{}".format(x[0].upper() + x[0].lower(), x[1:]) for x in l]
     return alternates(redirects)
 
 

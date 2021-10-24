@@ -52,9 +52,9 @@ def set_up_logging(logfile):
 def run():
     args = get_args()
     set_up_logging(logfile=args.logfile)
-    print(args)
-    # indent.main(chunk=args.chunk, delay=args.delay,
-    #     limit=args.total, quiet=not args.verbose)
+    # print(args)
+    indent.main(chunk=args.chunk, delay=args.delay,
+        limit=args.total, quiet=not args.verbose)
 
 
 if __name__ == '__main__':

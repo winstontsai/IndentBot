@@ -445,7 +445,7 @@ def continuous_pages_to_check(chunk, delay):
         oldest = next(iter(view), None)
         # check if oldest timestamp at least as old as the cutoff timestamp
         while oldest is not None and oldest[0] <= cutoff_ts:
-            yield edits.popitem(last = False)[1][1] # yield Page object
+            yield edits.popitem(last = False)[1][1] # yield Page
             oldest = next(iter(view), None)
 
         old_time = current_time

@@ -1,11 +1,13 @@
-# This module defines some reusable regexes/patterns, and some helper functions.
-################################################################################
+"""
+This module defines some reusable regexes/patterns, and some helper functions.
+"""
 import regex as re
 
 from calendar import month_name
 ################################################################################
 def pattern_count(pattern, text, flags=0):
     return sum(1 for x in re.finditer(pattern, text, flags))
+
 
 def find_pattern(pattern, text, start=0, end=None, flags=0):
     if end is None:
@@ -16,6 +18,7 @@ def find_pattern(pattern, text, start=0, end=None, flags=0):
         return m.start()
     return -1
 
+
 def rfind_pattern(pattern, text, start=0, end=None, flags=0):
     if end == None:
         end = len(text)
@@ -25,11 +28,13 @@ def rfind_pattern(pattern, text, start=0, end=None, flags=0):
         return m.start()
     return -1
 
+
 def index_pattern(pattern, text, start=0, end=None, flags=0):
     i = find_pattern(pattern, text, start, end, flags)
     if i == -1:
         raise ValueError('substring not found')
     return i
+
 
 def rindex_pattern(pattern, text, start=0, end=None, flags=0):
     i = rfind_pattern(pattern, text, start, end, flags)
@@ -37,11 +42,13 @@ def rindex_pattern(pattern, text, start=0, end=None, flags=0):
         raise ValueError('substring not found')
     return i
 
+
 def is_subspan(x, y):
     """
     Return True if x is a subspan of y.
     """
     return y[0]<=x[0] and x[1]<=y[1]
+
 
 def in_subspan(i, span):
     return span[0] <= i < span[1]
@@ -51,6 +58,7 @@ def in_subspan(i, span):
 ##############################################################################
 def alternates(l):
     return '(?:' + "|".join(l) + '})'
+
 
 def template_pattern(name, disambiguator = ''):
     """
@@ -62,6 +70,7 @@ def template_pattern(name, disambiguator = ''):
     t = r'(?P<template_' + z + r'>{{(?:[^}{]|(?&template_' + z + r'))*}})'
     return r'{{\s*' + name + r'\s*(?:\|(?:[^}}{{]|{t})*)?' + '}}'
 
+
 def construct_redirects(l):
     """
     Constructs the part of a regular expression which
@@ -71,6 +80,7 @@ def construct_redirects(l):
     """
     redirects = [fr"[{x[0].upper() + x[0].lower()}]{x[1:]}" for x in l]
     return alternates(redirects)
+
 
 ##############################################################################
 # Helper functions for templates
@@ -91,6 +101,7 @@ def parse_template(template):
             d[str(counter)] = param
             counter += 1
     return (pieces[0], d)
+
 
 def construct_template(name, d):
     positional = ''
@@ -131,12 +142,17 @@ OTHER_SPACES = (4, 10)
 # Wikipedia, Template
 NAMESPACES = TALK_SPACES + OTHER_SPACES
 
-BAD_PREFIXES = ('Wikipedia:Templates for discussion/', )
+# BAD_PREFIXES = ('Wikipedia:Templates for discussion/', )
+BAD_PREFIXES = ()
 
-SANDBOXES = ('Wikipedia:Sandbox', 'Wikipedia talk:Sandbox',
-    'User talk:Sandbox', 'User talk:Sandbox for user warnings',
+SANDBOXES = (
+    'Wikipedia:Sandbox',
+    'Wikipedia talk:Sandbox',
     'Wikipedia:Articles for creation/AFC sandbox',
-    'User:Sandbox')
+    'User talk:Sandbox',
+    'User talk:Sandbox for user warnings',
+    'User:Sandbox',
+)
 
 if __name__ == "__main__":
     pass

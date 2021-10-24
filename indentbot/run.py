@@ -6,10 +6,11 @@ import sys
 from pathlib import Path
 
 import indent
+################################################################################
 
 def get_args():
     parser = argparse.ArgumentParser(
-        description = ('Bot that helps maintain consistent and correct '
+        description=('Bot that helps maintain consistent and correct '
             'indentation in discussion pages on Wikipedia.'))
     parser.add_argument('-c', '--chunk', type=int, default=2,
         help='minimum minutes between recent changes checkpoints (default: 2)')
@@ -22,6 +23,7 @@ def get_args():
     parser.add_argument('-v', '--verbose', action='store_true',
         help='acknowledge successful edits by printing a {{Diff2}} template string')
     return parser.parse_args()
+
 
 def set_up_logging(logfile):
     """
@@ -38,20 +40,21 @@ def set_up_logging(logfile):
         path = path / 'indentbot.log'
         logfile = str(path)
 
-    file_handler = logging.FileHandler(filename = logfile)
+    file_handler = logging.FileHandler(filename=logfile)
     formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.INFO)
 
     logger.addHandler(file_handler)
     logger.setLevel(logging.INFO)
-    logger.propagate = False
+
 
 def run():
     args = get_args()
-    set_up_logging(logfile = args.logfile)
+    set_up_logging(logfile=args.logfile)
     indent.main(chunk=args.chunk, delay=args.delay,
         limit=args.total, quiet=not args.verbose)
+
 
 if __name__ == '__main__':
     run()

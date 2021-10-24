@@ -145,15 +145,19 @@ def fix_indent_style(lines):
     prev_lvl = 0
     indent_dict = {0: ''}
     for line in lines:
-        lvl = indent_lvl(line)
+        old_indent = indent_text(line)
+        lvl = len(old_indent)
         minlvl = min(lvl, prev_lvl)
 
         # necessary when using certain strategies to fix indentation lvls
         minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
-        # don't change indent style of lines starting with a table
+        # don't change style of lines starting with a table
         if re.match(fr':*( |{COMMENT_RE})*' + r'\{\|', line):
-            new_indent = line[:lvl]
+            new_indent = old_indent
+        # don't change style if it's a small notice indented with a colon
+        elif re.match(r': ?<small[^>]*> ?Note:', line):
+            new_indent = old_indent
         else:
             new_prefix = ''
             p1, p2 = 0, 0
@@ -173,15 +177,66 @@ def fix_indent_style(lines):
                 p1 += 1
                 p2 += 1
             new_indent = new_prefix + line[p2:lvl]
-
+            # Only store if this line has not been intentionally avoided.
+            indent_dict[len(new_indent)] = new_indent
+            
         new_lines.append(new_indent + line[lvl:])
-        indent_dict[len(new_indent)] = new_indent
         prev_lvl = len(new_indent)
 
         # reset "memory" if list-breaking newline encountered
         if lvl == 0 or has_linebreaking_newline(new_lines[-1]):
             indent_dict = {0: ''}
     return new_lines
+
+# def fix_indent_style2(lines):
+#     """
+#     Do not mix indent styles. Each line's indentation style must match
+#     the most recently used indentation style.
+
+#     lines argument may be altered.
+#     """
+#     new_lines = []
+#     prev_lvl = 0
+#     indent_dict = {0: ''}
+#     for line in lines:
+#         old_indent = indent_text(line)
+#         lvl = len(old_indent)
+#         minlvl = min(lvl, prev_lvl)
+
+#         # necessary when using certain strategies to fix indentation lvls
+#         minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
+
+#         # don't change style of lines starting with a table
+#         if re.match(fr':*( |{COMMENT_RE})*' + r'\{\|', line):
+#             new_indent = old_indent
+#         else:
+#             new_prefix = ''
+#             p1, p2 = 0, 0
+#             while p1 < minlvl and p2 < lvl:
+#                 c1 = indent_dict[minlvl][p1]
+#                 c2 = line[p2]
+#                 if c1 == '#':
+#                     if p2 <= lvl - 3 and line[p2:p2+2] == '::':
+#                         new_prefix += '#'
+#                         p2 += 1
+#                     else:
+#                         new_prefix += c2
+#                 elif c2 == '#':
+#                     new_prefix += c2
+#                 else:
+#                     new_prefix += c1
+#                 p1 += 1
+#                 p2 += 1
+#             new_indent = new_prefix + line[p2:lvl]
+
+#         new_lines.append(new_indent + line[lvl:])
+#         prev_lvl = len(new_indent)
+#         indent_dict[prev_lvl] = new_indent
+
+#         # reset "memory" if list-breaking newline encountered
+#         if lvl == 0 or has_linebreaking_newline(new_lines[-1]):
+#             indent_dict = {0: ''}
+#     return new_lines
 
 
 ################################################################################
@@ -331,7 +386,7 @@ def recent_changes(start, end, min_sigs=3):
             groups = User(SITE, user).groups()
             if 'autoconfirmed' in groups or 'confirmed' in groups:
                 logger.error(
-                    ("STOPPED by [[User:" + user + "]].\n"
+                    ("STOPPED by [[User:" + user + "]]. "
                     "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
                 sys.exit(0)
 
@@ -407,28 +462,33 @@ def fix_page(page):
     """
     if type(page) == str:
         page = Page(SITE, page)
-    title = page.title(as_link=True)
+    title = page.title()
+    title_as_link = page.title(as_link=True)
+
     # get latest version so that there is no edit conflict
     new_text = fix_text(page.get(force=True)) 
     if page.text != new_text:
         page.text = new_text
         try:
             page.save(summary=EDIT_SUMMARY,
-                nocreate=True, minor=False, quiet=True)
+                      nocreate=True,
+                      minor=title.startswith('User talk:'),
+                      quiet=True)
             return diff_template(page)
         except EditConflictError:
-            logger.warning('Edit conflict for {}.'.format(title))
+            logger.warning('Edit conflict for {}.'.format(title_as_link))
         except OtherPageSaveError as err:
             if err.reason.startswith('Editing restricted by {{bots}}'):
-                logger.warning('Not allowed to edit {}.'.format(title))
+                logger.warning('Not allowed to edit {}.'.format(title_as_link))
             else:
-                logger.exception('Other page save error for {}.'.format(title))
+                logger.exception(
+                        'Other page save error for {}.'.format(title_as_link))
                 sys.exit(0)
         except PageSaveRelatedError:
-            logger.exception('Save related error for {}.'.format(title))
+            logger.exception('Save related error for {}.'.format(title_as_link))
             sys.exit(0)
         except Exception:
-            logger.exception('Unknown error when saving {}.'.format(title))
+            logger.exception('Error when saving {}.'.format(title_as_link))
             sys.exit(0)
 
 
@@ -447,7 +507,8 @@ def main(chunk, delay, limit=float('inf'), quiet=True):
             logger.info('Limit reached.')
             break
     t2 = time.perf_counter()
-    logger.info('Ending run. Time elapsed = {} seconds.'.format(t2 - t1))
+    logger.info(('Ending run. Total edits = {}. '
+                 'Time elapsed = {} seconds.').format(count, t2 - t1))
 
 
 if __name__ == "__main__":

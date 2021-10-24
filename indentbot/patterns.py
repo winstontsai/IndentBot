@@ -124,7 +124,8 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 # Storage
 ##############################################################################
 EDIT_SUMMARY = ('Adjusted indentation. Trial edit. '
-    'See [[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]].')
+    'See [[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]] and '
+    '[[MOS:INDENTMIX]].')
 
 MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
 SIGNATURE_PATTERN = (

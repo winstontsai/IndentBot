@@ -21,7 +21,7 @@ def get_args():
     parser.add_argument('-t', '--total', type=int,
         help='maximum number of edits to make (default: inf)', default=float('inf'))
     parser.add_argument('-v', '--verbose', action='store_true',
-        help='acknowledge successful edits by printing a {{Diff2}} template string')
+        help='print the {{Diff2}} template for successful edits')
     return parser.parse_args()
 
 
@@ -52,8 +52,9 @@ def set_up_logging(logfile):
 def run():
     args = get_args()
     set_up_logging(logfile=args.logfile)
-    indent.main(chunk=args.chunk, delay=args.delay,
-        limit=args.total, quiet=not args.verbose)
+    print(args)
+    # indent.main(chunk=args.chunk, delay=args.delay,
+    #     limit=args.total, quiet=not args.verbose)
 
 
 if __name__ == '__main__':

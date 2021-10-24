@@ -12,15 +12,15 @@ def get_args():
         description = ('Bot that helps maintain consistent and correct '
             'indentation in discussion pages on Wikipedia.'))
     parser.add_argument('-c', '--chunk', type=int, default=2,
-        help='minutes between recent changes checkpoints (default: 2)')
+        help='minimum minutes between recent changes checkpoints (default: 2)')
     parser.add_argument('-d', '--delay', type=int, default=10,
-        help='minimum buffer time in minutes before editing a page (default: 10)')
+        help='minimum minutes before fixing a page (default: 10)')
     parser.add_argument('-l', '--logfile',
-        help='log file (default: $HOME/logs/indentbot.log)')
+        help='log filename (default: $HOME/logs/indentbot.log)')
     parser.add_argument('-t', '--total', type=int,
-        help='maximum number of edits to make (default: no limit)', default=float('inf'))
+        help='maximum number of edits to make (default: inf)', default=float('inf'))
     parser.add_argument('-v', '--verbose', action='store_true',
-        help='acknowledge successful edits by printing a {{Diff2}} transclution')
+        help='acknowledge successful edits by printing a {{Diff2}} template string')
     return parser.parse_args()
 
 def set_up_logging(logfile):
@@ -50,7 +50,6 @@ def set_up_logging(logfile):
 def run():
     args = get_args()
     set_up_logging(logfile = args.logfile)
-    # print(args)
     indent.main(chunk=args.chunk, delay=args.delay,
         limit=args.total, quiet=not args.verbose)
 

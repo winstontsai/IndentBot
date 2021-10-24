@@ -34,11 +34,8 @@ def visual_lvl(line):
     x = indent_text(line)
     return len(x) + x.count('#')
 
-def subtract_tstamps(x, y):
-    return Timestamp.fromISOformat(x) - Timestamp.fromISOformat(y)
-
-def is_talk_page(ns):
-    return ns % 2 == 1
+def is_talk_namespace(namespace_num):
+    return namespace_num % 2 == 1
 
 def has_linebreaking_newline(line):
     # Return True if line contains "real" line break besides at the end
@@ -53,7 +50,8 @@ def diff_template(page, title=True):
     x = '{{Diff2|' + str(page.latest_revision_id)
     if title:
         x += '|' + page.title()
-    return x + '}}'
+    x += '}}'
+    return x
 
 ################################################################################
 # Fix gaps between indented lines
@@ -141,7 +139,7 @@ def fix_indent_style(lines):
         # necessary when using certain strategies to fix indentation lvls
         minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
-        # ignore lines starting with table
+        # don't change indent style of lines starting with a table
         if re.match(fr':*( |{COMMENT_RE})*' + r'\{\|', line):
             new_indent = line[:lvl] # keep same indent
         else:
@@ -163,6 +161,7 @@ def fix_indent_style(lines):
                 p1 += 1
                 p2 += 1
             new_indent = new_prefix + line[p2:lvl]
+
         new_lines.append(new_indent + line[lvl:])
         indent_dict[len(new_indent)] = new_indent # record style
         prev_lvl = len(new_indent)
@@ -170,11 +169,7 @@ def fix_indent_style(lines):
         # reset "memory" if list-breaking newline encountered
         if lvl == 0 or has_linebreaking_newline(new_lines[-1]):
             indent_dict = {0: ''}
-
     return new_lines
-
-################################################################################
-# Miscellaneous fixes, on text string
 
 ################################################################################
 # Apply the fixes to some text
@@ -249,21 +244,21 @@ def fix_text(text):
     text = ''.join(new_lines)
     return text
 
-def fix_text2(text):
-    lines = line_partition(text)
+# def fix_text2(text):
+#     lines = line_partition(text)
 
-    new_lines = fix_gaps(lines)
-    new_lines = fix_extra_indents(new_lines)
-    new_lines = fix_indent_style2(new_lines)
+#     new_lines = fix_gaps(lines)
+#     new_lines = fix_extra_indents(new_lines)
+#     new_lines = fix_indent_style2(new_lines)
 
-    while new_lines != lines:
-        lines = list(new_lines)
-        new_lines = fix_gaps(new_lines)
-        new_lines = fix_extra_indents(new_lines)
-        new_lines = fix_indent_style2(new_lines)
+#     while new_lines != lines:
+#         lines = list(new_lines)
+#         new_lines = fix_gaps(new_lines)
+#         new_lines = fix_extra_indents(new_lines)
+#         new_lines = fix_indent_style2(new_lines)
 
-    text = ''.join(new_lines)
-    return text
+#     text = ''.join(new_lines)
+#     return text
 
 ################################################################################
 # Create continuous generator of pages to edit
@@ -337,7 +332,7 @@ def recent_changes(start, end, min_sigs=3):
         text = pages[title].text
 
         # check for a few signatures if not a talk page
-        if not is_talk_page(ns):
+        if not is_talk_namespace(ns):
             signatures = set()
             for m in re.finditer(SIGNATURE_PATTERN, text):
                 signatures.add(m[0])
@@ -363,15 +358,13 @@ def continuous_pages_to_check(chunk, delay):
     """
     Check recent changes in intervals of chunk minutes.
     Give at least delay minutes of buffer time before editing.
-    Should have chunk <= delay / 5.
+    Chunk should be a small enough fraction of delay.
     """
     edits = OrderedDict()
     one_sec = timedelta(seconds=1)
     delay = timedelta(minutes=delay)
-    old_time = SITE.server_time() - timedelta(minutes=chunk)
-
+    old_time = SITE.server_time() - delay
     while True:
-        loop_start_time = time.perf_counter()
         current_time = SITE.server_time()
         # get new changes, append to edits dict
         for title, ts, page in recent_changes(old_time, current_time):
@@ -380,19 +373,18 @@ def continuous_pages_to_check(chunk, delay):
 
         # yield pages that have waited long enough
         cutoff_ts = (current_time - delay).isoformat()
-        view = edits.items()
+        view = edits.values()
         oldest = next(iter(view), None)
-        # check if oldest is past the cutoff
-        while oldest is not None and oldest[1][0] <= cutoff_ts:
-            yield oldest[1][1]     # yield Page object
-            del edits[oldest[0]]
+        # check if oldest timestamp at least as old as the cutoff timestamp
+        while oldest is not None and oldest[0] <= cutoff_ts:
+            yield edits.popitem(last = False)[1][1] # yield Page object
             oldest = next(iter(view), None)
 
         old_time = current_time + one_sec
-        time.sleep(chunk*60 - (time.perf_counter()-loop_start_time))
+        time.sleep(chunk*60)
 
 ################################################################################
-# Function to fix and save a page, and main function to run continuous program.
+# Function to fix and save a page, handling exceptions
 def fix_page(page):
     """
     Apply fixes to a page and save it if there was a change in the text.
@@ -402,7 +394,7 @@ def fix_page(page):
     if type(page) == str:
         page = Page(SITE, page)
     title = page.title(as_link=True)
-    # get latest version so that there is likely no edit conflict
+    # get latest version so that there is no edit conflict
     new_text = fix_text(page.get(force=True)) 
     if page.text != new_text:
         page.text = new_text
@@ -425,6 +417,7 @@ def fix_page(page):
             logger.exception('Unknown error when saving {}.'.format(title))
             sys.exit(0)
 
+################################################################################
 def main(chunk, delay, limit = float('inf'), quiet = True):
     logger.info('Starting run.')
     t1 = time.perf_counter()
@@ -435,8 +428,6 @@ def main(chunk, delay, limit = float('inf'), quiet = True):
             count += 1
             if not quiet:
                 print(diff_template)
-        elif not quiet:
-            print('Failed to save {}.'.format(p.title(as_link=True)))
 
         if count >= limit:
             logger.info('Limit reached.')
@@ -444,6 +435,7 @@ def main(chunk, delay, limit = float('inf'), quiet = True):
 
     t2 = time.perf_counter()
     logger.info('Ending run. Time elapsed = {} seconds.'.format(t2 - t1))
+
 
 if __name__ == "__main__":
     pass

@@ -53,6 +53,11 @@ def is_subspan(x, y):
 def in_subspan(i, span):
     return span[0] <= i < span[1]
 
+
+def start_with_prefix_in(text, prefixes):
+    return any(text.startswith(x) for x in prefixes)
+
+
 ##############################################################################
 # Helper functions for making regular expressions
 ##############################################################################
@@ -123,9 +128,9 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 ##############################################################################
 # Storage
 ##############################################################################
-EDIT_SUMMARY = ('Adjusted indentation. Trial edit. '
-    'See [[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]] and '
-    '[[MOS:INDENTMIX]].')
+EDIT_SUMMARY = ('Adjusted indentation. '
+    '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]]. '
+    'See [[User:IndentBot]] for guidelines and more info.')
 
 MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
 SIGNATURE_PATTERN = (
@@ -144,7 +149,12 @@ OTHER_SPACES = (4, 10)
 NAMESPACES = TALK_SPACES + OTHER_SPACES
 
 # BAD_PREFIXES = ('Wikipedia:Templates for discussion/', )
-BAD_PREFIXES = ()
+BAD_TITLE_PREFIXES = (
+    'Wikipedia:Categories_for_discussion/',
+    'Wikipedia:Requests for permissions/',
+)
+
+TEMPLATE_TITLE_PREFIXES = ('Template:Did you know nominations/')
 
 SANDBOXES = (
     'Wikipedia:Sandbox',

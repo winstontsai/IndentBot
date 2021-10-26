@@ -13,8 +13,8 @@ import pywikibot as pwb
 import wikitextparser as wtp
 
 from pywikibot import Page, Site, Timestamp, User
-from pywikibot.exceptions import EditConflictError, OtherPageSaveError
-from pywikibot.exceptions import PageSaveRelatedError
+from pywikibot.exceptions import (EditConflictError, LockedPageError,
+                                  OtherPageSaveError, PageSaveRelatedError)
 
 from patterns import *
 
@@ -25,9 +25,15 @@ SITE = Site('en','wikipedia')
 SITE.login(user='IndentBot')
 
 # Certain users are allowed to stop and resume the bot.
-# This flag tracks the status. See the function recent_changes.
-# When stopped, the bot doesn't save pages.
-STOPPED = False
+# See the function recent_changes.
+# When stopped, the bot check edits or save pages.
+STOPPED_BY = None
+
+
+def set_status_page(status):
+    page = Page(SITE, 'User:IndentBot/status')
+    page.text = 'true' if status else 'false'
+    page.save(summary='Updating status.')
 
 
 def is_blank_line(line):
@@ -378,8 +384,30 @@ def should_not_edit(title):
         return True
     return False
 
+def check_stop_or_resume(c):
+    # stop or resume based on IndentBot's talk page edits
+    title, user, comment = c['title'], c['user'], c.get('comment', '')
+    revid, ts = c['revid'], c['timestamp']
+    if title == 'User talk:IndentBot':
+        groups = set(User(SITE, user).groups())
+        if {'autoconfirmed', 'confirmed'} & groups:
+            if comment.startswith('STOP') and not STOPPED_BY:
+                STOPPED_BY = user
+                set_status_page(False)
+                logger.info(
+                    ("STOPPED by [[User:" + user + "]].\n"
+                    "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
+            elif comment.startswith('RESUME') and STOPPED_BY:
+                STOPPED_BY = None
+                set_status_page(True)
+                logger.info(
+                    ("RESUMED by [[User:" + user + "]].\n"
+                    "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
+
 
 def recent_changes(start, end, min_sigs=3):
+    if STOPPED_BY:
+        return
     logger.info('Checking edits from {} to {}.'.format(start, end))
     # page cache for this checkpoint
     pages = dict()
@@ -387,25 +415,9 @@ def recent_changes(start, end, min_sigs=3):
             start=start, end=end, reverse=True,
             changetype='edit', namespaces=NAMESPACES,
             minor=False, bot=False, redirect=False):
+        check_stop_or_resume(change)
         title, ns = change['title'], change['ns']
-        revid = change['revid']
-        user = change['user']
-        comment = change.get('comment', '')
         ts = change['timestamp'] # e.g. 2021-10-19T02:46:45Z
-        
-        # stop or resume based on IndentBot's talk page edits
-        if title == 'User talk:IndentBot':
-            if {'autoconfirmed', 'confirmed'} & set(User(SITE, user).groups()):
-                if 'STOP' in comment and not STOPPED:
-                    STOPPED = True
-                    logger.info(
-                        ("STOPPED by [[User:" + user + "]]. "
-                        "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
-                elif 'RESUME' in comment and STOPPED:
-                    STOPPED = False
-                    logger.info(
-                        ("RESUMED by [[User:" + user + "]]. "
-                        "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
 
         # Number of bytes should increase by some amount.
         if change['newlen'] - change['oldlen'] < 42:
@@ -458,11 +470,13 @@ def continuous_pages_to_check(chunk, delay):
             edits.move_to_end(title)
         # yield pages that have waited long enough
         cutoff_ts = (current_time - delay).isoformat()
-        view = edits.values()
+        view = edits.items()
         oldest = next(iter(view), None)
         # check if oldest timestamp at least as old as the cutoff timestamp
-        while oldest is not None and oldest[0] <= cutoff_ts:
-            yield edits.popitem(last = False)[1][1] # yield Page
+        while oldest is not None and oldest[1][0] <= cutoff_ts:
+            # yield the page and delete from edits
+            yield oldest[1][1]
+            del edits[oldest[0]]
             oldest = next(iter(view), None)
 
         old_time = current_time
@@ -481,7 +495,7 @@ def fix_page(page):
     if type(page) == str:
         page = Page(SITE, page)
     title = page.title()
-    title_as_link = page.title(as_link=True)
+    title_link = page.title(as_link=True)
 
     # get latest version so that there is no edit conflict
     page.text = page.get(force=True)
@@ -495,21 +509,23 @@ def fix_page(page):
                       quiet=True)
             return diff_template(page)
         except EditConflictError:
-            logger.warning('Edit conflict for {}.'.format(title_as_link))
+            logger.warning('Edit conflict for {}.'.format(title_link))
+        except LockedPageError:
+            logger.warning('Page {} is locked.'.format(title_link))
         except OtherPageSaveError as err:
             if err.reason.startswith('Editing restricted by {{bots}}'):
-                logger.warning('Not allowed to edit {}.'.format(title_as_link))
+                logger.warning(
+                    'Edit to {} prevented by {{{{bots}}}}.'.format(title_link))
             else:
                 logger.exception(
-                        'Other page save error for {}.'.format(title_as_link))
-                sys.exit(0)
+                        'OtherPageSaveError for {}.'.format(title_link))
+                raise
         except PageSaveRelatedError:
-            logger.exception('Save related error for {}.'.format(title_as_link))
-            sys.exit(0)
+            logger.exception('PageSaveRelatedError for {}.'.format(title_link))
+            raise
         except Exception:
-            logger.exception('Error when saving {}.'.format(title_as_link))
-            sys.exit(0)
-
+            logger.exception('Error when saving {}.'.format(title_link))
+            raise
 
 ################################################################################
 def main(chunk, delay, limit=float('inf'), quiet=True):
@@ -517,7 +533,7 @@ def main(chunk, delay, limit=float('inf'), quiet=True):
     t1 = time.perf_counter()
     count = 0
     for p in continuous_pages_to_check(chunk=chunk, delay=delay):
-        if STOPPED:
+        if STOPPED_BY:
             continue
         diff_template = fix_page(p)
         if diff_template:

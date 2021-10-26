@@ -54,7 +54,7 @@ def in_subspan(i, span):
     return span[0] <= i < span[1]
 
 
-def start_with_prefix_in(text, prefixes):
+def starts_with_prefix_in(text, prefixes):
     return any(text.startswith(x) for x in prefixes)
 
 

@@ -1,11 +1,11 @@
 import argparse
 import logging
-import time
 import sys
 
 from pathlib import Path
 
 import indent
+
 ################################################################################
 
 def get_args():
@@ -55,5 +55,10 @@ def run():
 
 
 if __name__ == '__main__':
-    run()
+    try:
+        indent.set_status_page(True)
+        run()
+    except:
+        indent.set_status_page(False)
+        raise
 

@@ -33,7 +33,7 @@ STOPPED_BY = None
 def set_status_page(status):
     page = Page(SITE, 'User:IndentBot/status')
     page.text = 'true' if status else 'false'
-    page.save(summary='Updating status.')
+    page.save(summary='Updating status: {}.'.format(page.text))
 
 
 def is_blank_line(line):
@@ -388,10 +388,10 @@ def check_stop_or_resume(c):
     # Stop or resume the bot based on a talk page edit.
     title, user, comment = c['title'], c['user'], c.get('comment', '')
     revid, ts = c['revid'], c['timestamp']
-    if not title == 'User talk:IndentBot':
+    if title != 'User talk:IndentBot':
         return
     groups = set(User(SITE, user).groups())
-    if not groups & {'autoconfirmed', 'confirmed'}:
+    if groups.isdisjoint({'autoconfirmed', 'confirmed'}):
         continue
     if comment.startswith('STOP') and not STOPPED_BY:
         STOPPED_BY = user
@@ -512,14 +512,14 @@ def fix_page(page):
         except EditConflictError:
             logger.warning('Edit conflict for {}.'.format(title_link))
         except LockedPageError:
-            logger.warning('Page {} is locked.'.format(title_link))
+            logger.warning('{} is locked.'.format(title_link))
         except OtherPageSaveError as err:
             if err.reason.startswith('Editing restricted by {{bots}}'):
                 logger.warning(
                     'Edit to {} prevented by {{{{bots}}}}.'.format(title_link))
             else:
                 logger.exception(
-                        'OtherPageSaveError for {}.'.format(title_link))
+                    'OtherPageSaveError for {}.'.format(title_link))
                 raise
         except PageSaveRelatedError:
             logger.exception('PageSaveRelatedError for {}.'.format(title_link))

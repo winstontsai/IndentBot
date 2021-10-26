@@ -388,27 +388,28 @@ def check_stop_or_resume(c):
     # Stop or resume the bot based on a talk page edit.
     title, user, comment = c['title'], c['user'], c.get('comment', '')
     revid, ts = c['revid'], c['timestamp']
-    if title == 'User talk:IndentBot':
-        groups = set(User(SITE, user).groups())
-        if {'autoconfirmed', 'confirmed'} & groups:
-            if comment.startswith('STOP') and not STOPPED_BY:
-                STOPPED_BY = user
-                set_status_page(False)
-                logger.info(
-                    ("STOPPED by [[User:" + user + "]].\n"
-                    "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
-            elif comment.startswith('RESUME') and STOPPED_BY:
-                STOPPED_BY = None
-                set_status_page(True)
-                logger.info(
-                    ("RESUMED by [[User:" + user + "]].\n"
-                    "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
+    if not title == 'User talk:IndentBot':
+        return
+    groups = set(User(SITE, user).groups())
+    if not groups & {'autoconfirmed', 'confirmed'}:
+        continue
+    if comment.startswith('STOP') and not STOPPED_BY:
+        STOPPED_BY = user
+        set_status_page(False)
+        logger.info(
+            ("STOPPED by [[User:" + user + "]].\n"
+            "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
+    elif comment.startswith('RESUME') and STOPPED_BY:
+        if user in MAINTAINERS or 'sysop' in groups:
+            STOPPED_BY = None
+            set_status_page(True)
+            logger.info(
+                ("RESUMED by [[User:" + user + "]].\n"
+                "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
 
 
 def passes_signature_check(text, ts, ns):
     # Check for at least THREE signatures if it is not a talk page.
-    # Returns the match object for a signature with matching timestamp if
-    # the page passes. Returns None otherwise.
     if not is_talk_namespace(ns):
         count = 0
         for m in re.finditer(SIGNATURE_PATTERN, text):
@@ -423,7 +424,7 @@ def passes_signature_check(text, ts, ns):
         + r'{}:{}, '.format(ts[11:13], ts[14:16])    # hh:mm
         + ts[8:10].lstrip('0') + ' '                 # day
         + month_name[int(ts[5:7])] + ' '             # month name
-        + ts[:4] + r' \(UTC\)'                          # yyyy
+        + ts[:4] + r' \(UTC\)'                       # yyyy
     )
     return re.search(recent_sig_pat, text)
 

@@ -126,8 +126,10 @@ def construct_template(name, d):
 COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 
 ##############################################################################
-# Storage
+# Constants
 ##############################################################################
+MAINTAINERS = ('IndentBot', 'Notsniwiast')
+
 EDIT_SUMMARY = ('Adjusted indentation. '
     '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]]. '
     'See [[User:IndentBot]] for guidelines and more info.')

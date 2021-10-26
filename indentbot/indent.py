@@ -385,7 +385,7 @@ def should_not_edit(title):
     return False
 
 def check_stop_or_resume(c):
-    # stop or resume based on IndentBot's talk page edits
+    # Stop or resume the bot based on a talk page edit.
     title, user, comment = c['title'], c['user'], c.get('comment', '')
     revid, ts = c['revid'], c['timestamp']
     if title == 'User talk:IndentBot':
@@ -405,7 +405,30 @@ def check_stop_or_resume(c):
                     "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
 
 
-def recent_changes(start, end, min_sigs=3):
+def passes_signature_check(text, ts, ns):
+    # Check for at least THREE signatures if it is not a talk page.
+    # Returns the match object for a signature with matching timestamp if
+    # the page passes. Returns None otherwise.
+    if not is_talk_namespace(ns):
+        count = 0
+        for m in re.finditer(SIGNATURE_PATTERN, text):
+            count += 1
+            if count >= 3:
+                break
+        else:
+            return None
+    # Always check for signature with matching timestamp.
+    recent_sig_pat = (
+        r'\[\[[Uu]ser(?: talk)?:[^\n]+?'             # user link
+        + r'{}:{}, '.format(ts[11:13], ts[14:16])    # hh:mm
+        + ts[8:10].lstrip('0') + ' '                 # day
+        + month_name[int(ts[5:7])] + ' '             # month name
+        + ts[:4] + r' \(UTC\)'                          # yyyy
+    )
+    return re.search(recent_sig_pat, text)
+
+
+def recent_changes(start, end):
     if STOPPED_BY:
         return
     logger.info('Checking edits from {} to {}.'.format(start, end))
@@ -415,41 +438,18 @@ def recent_changes(start, end, min_sigs=3):
             start=start, end=end, reverse=True,
             changetype='edit', namespaces=NAMESPACES,
             minor=False, bot=False, redirect=False):
+        title, ts = change['title'], change['timestamp']
         check_stop_or_resume(change)
-        title, ns = change['title'], change['ns']
-        ts = change['timestamp'] # e.g. 2021-10-19T02:46:45Z
-
         # Number of bytes should increase by some amount.
         if change['newlen'] - change['oldlen'] < 42:
             continue
         if should_not_edit(title):
             continue
-
         # cache Page
         if title not in pages:
             pages[title] = Page(SITE, title)
-        text = pages[title].text
-        # Check for at least min_sigs signatures if it is not a talk page.
-        if not is_talk_namespace(ns):
-            signatures = set()
-            for m in re.finditer(SIGNATURE_PATTERN, text):
-                signatures.add(m[0])
-                if len(signatures) >= min_sigs:
-                    break
-            else:
-                continue
-        # Always check for signature with matching timestamp.
-        recent_sig_pat = (
-            r'\[\[[Uu]ser(?: talk)?:[^\n]+?'             # user link
-            + r'{}:{}, '.format(ts[11:13], ts[14:16])    # hh:mm
-            + ts[8:10].lstrip('0') + ' '                 # day
-            + month_name[int(ts[5:7])] + ' '             # month name
-            + ts[:4] + ' (UTC)'                          # yyyy
-        )
-        if not re.search(recent_sig_pat, text):
-            continue
-
-        yield (title, ts, pages[title])
+        if passes_signature_check(pages[title].text, ts, change['ns']):
+            yield (title, ts, pages[title])
 
 
 def continuous_pages_to_check(chunk, delay):

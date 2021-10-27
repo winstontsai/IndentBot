@@ -1,22 +1,23 @@
 """
 Fix indentation in discussion pages on Wikipedia.
+This module is for tracking recent changes and applying the fixes.
 """
 import logging
 import regex as re
 import sys
 import time
 
+from calendar import month_name
 from collections import OrderedDict
 from datetime import timedelta
-
-import pywikibot as pwb
-import wikitextparser as wtp
 
 from pywikibot import Page, Site, Timestamp, User
 from pywikibot.exceptions import (EditConflictError, LockedPageError,
                                   OtherPageSaveError, PageSaveRelatedError)
 
-from patterns import *
+from patterns import (BAD_TITLE_PREFIXES, NAMESPACES, SANDBOXES,
+                      SIGNATURE_PATTERN, TEMPLATE_PREFIXES)
+from patterns import starts_with_prefix_in
 from textfixer import TextFixer
 
 ################################################################################
@@ -39,10 +40,8 @@ def set_status_page(status):
     page.save(summary='Updating status: {}.'.format(page.text))
 
 
-
 def is_talk_namespace(namespace_num):
     return namespace_num % 2 == 1
-
 
 
 def diff_template(page, title=True):
@@ -54,7 +53,6 @@ def diff_template(page, title=True):
         x += '|' + page.title()
     x += '}}'
     return x
-
 
 ################################################################################
 # Functions to create continuous generator of pages to edit
@@ -76,10 +74,10 @@ def is_valid_template_page(title):
     Only edit certain template pages.
     An "opt-in" for the template namespace.
     """
-    return starts_with_prefix_in(title, TEMPLATE_TITLE_PREFIXES)
+    return starts_with_prefix_in(title, TEMPLATE_PREFIXES)
 
 
-def should_not_edit(title):
+def should_not_edit_title(title):
     """
     Returns True if a page should not be edited based on its title.
     An "opt-out" based on titles.
@@ -116,17 +114,16 @@ def check_stop_or_resume(c):
                 "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
 
 
-def passes_signature_check(text, ts, ns):
-    # Check for at least THREE signatures if it is not a talk page.
-    if not is_talk_namespace(ns):
-        count = 0
-        for m in re.finditer(SIGNATURE_PATTERN, text):
-            count += 1
-            if count >= 3:
-                break
-        else:
-            return None
-    # Always check for signature with matching timestamp.
+def has_n_sigs(text, n):
+    count = 0
+    for m in re.finditer(SIGNATURE_PATTERN, text):
+        count += 1
+        if count >= n:
+            return True
+    return False
+
+
+def has_sig_with_timestamp(text, ts):
     recent_sig_pat = (
         r'\[\[[Uu]ser(?: talk)?:[^\n]+?'             # user link
         + r'{}:{}, '.format(ts[11:13], ts[14:16])    # hh:mm
@@ -137,29 +134,38 @@ def passes_signature_check(text, ts, ns):
     return re.search(recent_sig_pat, text)
 
 
+def should_edit(change, cache):
+    if change['newlen'] - change['oldlen'] < 42:
+        return False
+    title, ts = change['title'], change['timestamp']
+    if should_not_edit_title(title):
+        return False
+    if title not in cache:
+        cache[title] = Page(SITE, title)
+    text = cache[title].text
+    if not is_talk_namespace(change['ns']) and not has_n_sigs(text, 3):
+        return False
+    if not has_sig_with_timestamp(text, ts):
+        return False
+    return (title, ts, cache[title])
+
+
 def recent_changes(start, end):
     logger.info('Checking edits from {} to {}.'.format(start, end))
     # page cache for this checkpoint
-    pages = dict()
+    cache = dict()
     for change in SITE.recentchanges(
             start=start, end=end, reverse=True,
             changetype='edit', namespaces=NAMESPACES,
             minor=False, bot=False, redirect=False):
-        title, ts = change['title'], change['timestamp']
+        # check whether to pause or resume editing based on talk page
         check_stop_or_resume(change)
-        # Number of bytes should increase by some amount.
-        if change['newlen'] - change['oldlen'] < 42:
-            continue
-        if should_not_edit(title):
-            continue
-        # cache Page
-        if title not in pages:
-            pages[title] = Page(SITE, title)
-        if passes_signature_check(pages[title].text, ts, change['ns']):
-            yield (title, ts, pages[title])
+        result = should_edit(change, cache)
+        if result:
+            yield result
 
 
-def continuous_pages_to_check(chunk, delay):
+def continuous_page_generator(chunk, delay):
     """
     Check recent changes in intervals of chunk minutes.
     Give at least delay minutes of buffer time before editing.
@@ -239,7 +245,7 @@ def main(chunk, delay, limit=float('inf'), quiet=True):
     logger.info('Starting run.')
     t1 = time.perf_counter()
     count = 0
-    for p in continuous_pages_to_check(chunk=chunk, delay=delay):
+    for p in continuous_page_generator(chunk=chunk, delay=delay):
         if STOPPED_BY:
             continue
         diff_template = fix_page(p)

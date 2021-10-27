@@ -274,8 +274,6 @@ class TextFixer:
         """
         Do not mix indent styles. Each line's indentation style must match
         the most recently used indentation style.
-
-        lines argument may be altered.
         """
         score = 0
         new_lines = []
@@ -331,8 +329,6 @@ class TextFixer:
     #     """
     #     Do not mix indent styles. Each line's indentation style must match
     #     the most recently used indentation style.
-
-    #     lines argument may be altered.
     #     """
     #     score = 0
     #     new_lines = []
@@ -385,9 +381,4 @@ class TextFixer:
 
 if __name__ == '__main__':
     pass
-
-
-
-
-
 

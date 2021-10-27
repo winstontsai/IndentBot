@@ -156,7 +156,7 @@ BAD_TITLE_PREFIXES = (
     'Wikipedia:Requests for permissions/',
 )
 
-TEMPLATE_TITLE_PREFIXES = ('Template:Did you know nominations/')
+TEMPLATE_PREFIXES = ('Template:Did you know nominations/')
 
 SANDBOXES = (
     'Wikipedia:Sandbox',

@@ -58,7 +58,10 @@ if __name__ == '__main__':
     try:
         indent.set_status_page(True)
         run()
-    except:
+    except BaseException as e:
         indent.set_status_page(False)
+        logging.getLogger('indentbot_logger').error(
+            ('Ending run due to an exception of type '
+             + type(e).__name__ + '.'))
         raise
 

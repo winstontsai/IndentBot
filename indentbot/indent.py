@@ -15,7 +15,7 @@ from pywikibot import Page, Site, Timestamp, User
 from pywikibot.exceptions import (EditConflictError, LockedPageError,
                                   OtherPageSaveError, PageSaveRelatedError)
 
-from patterns import (BAD_TITLE_PREFIXES, NAMESPACES, SANDBOXES,
+from patterns import (BAD_TITLE_PREFIXES, MAINTAINERS, NAMESPACES, SANDBOXES,
                       SIGNATURE_PATTERN, TEMPLATE_PREFIXES)
 from patterns import starts_with_prefix_in
 from textfixer import TextFixer
@@ -27,8 +27,7 @@ SITE = Site('en','wikipedia')
 SITE.login(user='IndentBot')
 
 # Certain users are allowed to stop and resume the bot.
-# See the function recent_changes.
-# When stopped, the bot check edits or save pages.
+# When stopped, the bot continues tracking edits, but does not edit any pages.
 STOPPED_BY = None
 
 ################################################################################
@@ -36,8 +35,9 @@ STOPPED_BY = None
 ################################################################################
 def set_status_page(status):
     page = Page(SITE, 'User:IndentBot/status')
-    page.text = 'true' if status else 'false'
-    page.save(summary='Updating status: {}.'.format(page.text))
+    status = 'active' if status else 'inactive'
+    page.text = status
+    page.save(summary='Updating status: {}.'.format(status), quiet=True)
 
 
 def is_talk_namespace(namespace_num):
@@ -129,31 +129,34 @@ def should_edit(change, cache):
 
 def check_stop_or_resume(c):
     # Stop or resume the bot based on a talk page edit.
-    title, user, comment = c['title'], c['user'], c.get('comment', '')
+    global STOPPED_BY
+    title, user, cmt = c['title'], c['user'], c.get('comment', '')
     revid, ts = c['revid'], c['timestamp']
     if title != 'User talk:IndentBot':
         return
     groups = set(User(SITE, user).groups())
     if groups.isdisjoint({'autoconfirmed', 'confirmed'}):
         return
-    if comment.startswith('STOP') and not STOPPED_BY:
+    if cmt.endswith('STOP') and not STOPPED_BY:
         STOPPED_BY = user
         set_status_page(False)
-        logger.info(
-            ("STOPPED by [[User:" + user + "]].\n"
-            "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
-    elif comment.startswith('RESUME') and STOPPED_BY:
+        logger.warning(
+            ("STOPPED by " + user + ".\n"
+             "    Revid     = {}\n"
+             "    Timestamp = {}\n"
+             "    Comment   = {}".format(revid, ts, cmt)))
+    elif cmt.endswith('RESUME') and STOPPED_BY:
         if user in MAINTAINERS or 'sysop' in groups:
             STOPPED_BY = None
             set_status_page(True)
-            logger.info(
-                ("RESUMED by [[User:" + user + "]].\n"
-                "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
+            logger.warning(
+                ("RESUMED by " + user + ".\n"
+                 "    Revid     = {}\n"
+                 "    Timestamp = {}\n"
+                 "    Comment   = {}".format(revid, ts, cmt)))
 
 
 def recent_changes(start, end):
-    if STOPPED_BY:
-        return
     logger.info('Checking edits from {} to {}.'.format(start, end))
     # page cache for this checkpoint
     cache = dict()
@@ -173,6 +176,8 @@ def continuous_page_generator(chunk, delay):
     Check recent changes in intervals of (roughly) chunk minutes.
     Give at least delay minutes of buffer time before editing.
     Chunk should be a small fraction of delay.
+    Note that it's possible for a buffer not to be given if an edit
+    is made between the checkpoint time and the actual save time.
     """
     edits = OrderedDict()
     sec = timedelta(seconds=1)
@@ -204,22 +209,21 @@ def continuous_page_generator(chunk, delay):
 def fix_page(page):
     """
     Apply fixes to a page and save it if there was a change in the text.
-    If no exception occurs on the save, return a string for Template:Diff2.
-    Returns false if there is no change or there is an exception on save.
+    If save is successful, returns a string for Template:Diff2.
+    Returns None (or raises an exception) otherwise.
     """
     if type(page) == str:
         page = Page(SITE, page)
     title = page.title()
     title_link = page.title(as_link=True)
-    # get latest version so that there is no edit conflict
+    # fix latest version so that there is no edit conflict
     tf = TextFixer(page.get(force=True))
-    score = tf.fix()
-    if score[-1]:
+    if sum(tf.score):
         page.text = tf.text
         try:
             page.save(summary=EDIT_SUMMARY,
-                      nocreate=True,
                       minor=title.startswith('User talk:'),
+                      nocreate=True,
                       quiet=True)
             return diff_template(page)
         except EditConflictError:

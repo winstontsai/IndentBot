@@ -120,6 +120,17 @@ class TextFixer:
             score[2] += c
         self._score = tuple(score)
 
+    def __str__(self):
+        return ''.join(self._lines)
+
+    @property
+    def text(self):
+        return str(self)
+
+    @property
+    def original_text(self):
+        return self._original_text
+
     @property
     def score(self):
         """
@@ -138,17 +149,6 @@ class TextFixer:
         """
         return 10000 * sum(self.score) // len(self.original_text)
 
-    def __str__(self):
-        return ''.join(self._lines)
-
-    @property
-    def original_text(self):
-        return self._original_text
-
-    @property
-    def text(self):
-        return str(self)
-
     def _fix_gaps(self, squish=True, single_only=False):
         """
         Remove gaps sandwiched indented lines.
@@ -163,20 +163,31 @@ class TextFixer:
             txt_i = indent_text(lines[i])
             lvl_i = len(txt_i)
             if lvl_i == 0:
-                i += 1; continue
+                i += 1
+                continue
 
-            j = next((k for k in range(i + 1, n) if not is_blank_line(lines[k])), n)
+            # find next non-blank line
+            j = i + 1
+            while j < n:
+                if is_blank_line(lines[j]):
+                    j += 1
+                    continue
+                break
             if j == n:
                 break
 
             txt_j = indent_text(lines[j])
             lvl_j = len(txt_j)
             if lvl_j >= 2 - squish:
-                safe_to_remove = False
-                if j - i == 2:
+                if txt_j.startswith('#') or txt_i.startswith('#'):
+                    safe_to_remove = False
+                elif j - i == 2:
                     safe_to_remove = True
                 elif not single_only and lvl_j > 1:
                     safe_to_remove = True
+                else:
+                    safe_to_remove = False
+
                 if safe_to_remove:
                     for k in range(i + 1, j):
                         lines[k] = ''

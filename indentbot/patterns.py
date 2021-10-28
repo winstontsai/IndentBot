@@ -50,7 +50,7 @@ def is_subspan(x, y):
     return y[0]<=x[0] and x[1]<=y[1]
 
 
-def in_subspan(i, span):
+def in_span(i, span):
     return span[0] <= i < span[1]
 
 

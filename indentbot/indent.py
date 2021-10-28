@@ -90,29 +90,6 @@ def should_not_edit_title(title):
         return True
     return False
 
-def check_stop_or_resume(c):
-    # Stop or resume the bot based on a talk page edit.
-    title, user, comment = c['title'], c['user'], c.get('comment', '')
-    revid, ts = c['revid'], c['timestamp']
-    if title != 'User talk:IndentBot':
-        return
-    groups = set(User(SITE, user).groups())
-    if groups.isdisjoint({'autoconfirmed', 'confirmed'}):
-        return
-    if comment.startswith('STOP') and not STOPPED_BY:
-        STOPPED_BY = user
-        set_status_page(False)
-        logger.info(
-            ("STOPPED by [[User:" + user + "]].\n"
-            "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
-    elif comment.startswith('RESUME') and STOPPED_BY:
-        if user in MAINTAINERS or 'sysop' in groups:
-            STOPPED_BY = None
-            set_status_page(True)
-            logger.info(
-                ("RESUMED by [[User:" + user + "]].\n"
-                "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
-
 
 def has_n_sigs(text, n):
     count = 0
@@ -150,7 +127,33 @@ def should_edit(change, cache):
     return (title, ts, cache[title])
 
 
+def check_stop_or_resume(c):
+    # Stop or resume the bot based on a talk page edit.
+    title, user, comment = c['title'], c['user'], c.get('comment', '')
+    revid, ts = c['revid'], c['timestamp']
+    if title != 'User talk:IndentBot':
+        return
+    groups = set(User(SITE, user).groups())
+    if groups.isdisjoint({'autoconfirmed', 'confirmed'}):
+        return
+    if comment.startswith('STOP') and not STOPPED_BY:
+        STOPPED_BY = user
+        set_status_page(False)
+        logger.info(
+            ("STOPPED by [[User:" + user + "]].\n"
+            "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
+    elif comment.startswith('RESUME') and STOPPED_BY:
+        if user in MAINTAINERS or 'sysop' in groups:
+            STOPPED_BY = None
+            set_status_page(True)
+            logger.info(
+                ("RESUMED by [[User:" + user + "]].\n"
+                "Revid={revid}\nTimestamp={ts}\nComment={comment}"))
+
+
 def recent_changes(start, end):
+    if STOPPED_BY:
+        return
     logger.info('Checking edits from {} to {}.'.format(start, end))
     # page cache for this checkpoint
     cache = dict()
@@ -167,7 +170,7 @@ def recent_changes(start, end):
 
 def continuous_page_generator(chunk, delay):
     """
-    Check recent changes in intervals of chunk minutes.
+    Check recent changes in intervals of (roughly) chunk minutes.
     Give at least delay minutes of buffer time before editing.
     Chunk should be a small fraction of delay.
     """

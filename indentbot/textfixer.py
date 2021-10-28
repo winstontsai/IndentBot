@@ -1,7 +1,7 @@
 import regex as re
 import wikitextparser as wtp
 
-from patterns import COMMENT_RE, in_subspan
+from patterns import COMMENT_RE, in_span
 
 ################################################################################
 # Basic helper functions
@@ -31,58 +31,6 @@ def has_linebreaking_newline(line):
     # be real line breaks.
     pat = '\n( |' + COMMENT_RE + r')*(\{[{|]|<[^!])'
     return bool(re.search(pat, line))
-
-################################################################################
-
-def fix_styles2(lines):
-    """
-    Do not mix indent styles. Each line's indentation style must match
-    the most recently used indentation style.
-
-    lines argument may be altered.
-    """
-    new_lines = []
-    prev_lvl = 0
-    indent_dict = {0: ''}
-    for line in lines:
-        old_indent = indent_text(line)
-        lvl = len(old_indent)
-        minlvl = min(lvl, prev_lvl)
-
-        # necessary when using certain strategies to fix indentation lvls
-        minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
-
-        # don't change style of lines starting with a table
-        if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
-            new_indent = old_indent
-        else:
-            new_prefix = ''
-            p1, p2 = 0, 0
-            while p1 < minlvl and p2 < lvl:
-                c1 = indent_dict[minlvl][p1]
-                c2 = line[p2]
-                if c1 == '#':
-                    if p2 <= lvl - 3 and line[p2:p2+2] == '::':
-                        new_prefix += '#'
-                        p2 += 1
-                    else:
-                        new_prefix += c2
-                elif c2 == '#':
-                    new_prefix += c2
-                else:
-                    new_prefix += c1
-                p1 += 1
-                p2 += 1
-            new_indent = new_prefix + line[p2:lvl]
-
-        new_lines.append(new_indent + line[lvl:])
-        prev_lvl = len(new_indent)
-        indent_dict[prev_lvl] = new_indent
-
-        # reset "memory" if list-breaking newline encountered
-        if lvl == 0 or has_linebreaking_newline(new_lines[-1]):
-            indent_dict = {0: ''}
-    return new_lines
 
 
 ################################################################################
@@ -144,7 +92,7 @@ def line_partition(text):
     for i, c in enumerate(text):
         if c != '\n':
             continue
-        if all(not in_subspan(i, s) for s in bad_spans):
+        if all(not in_span(i, s) for s in bad_spans):
             lines.append(text[prev:i + 1])
             prev = i + 1
     # Since Wikipedia strips newlines from the end, add final line.
@@ -188,7 +136,7 @@ class TextFixer:
         Represents the average total error score of a
         chunk of 10,000 characters from the original text.
         """
-        return 10000 * self.score // len(self.original_text)
+        return 10000 * sum(self.score) // len(self.original_text)
 
     def __str__(self):
         return ''.join(self._lines)

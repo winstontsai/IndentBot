@@ -3,13 +3,14 @@ Fix indentation in discussion pages on Wikipedia.
 This module is for tracking recent changes and applying the fixes.
 """
 import logging
-import regex as re
 import sys
 import time
 
 from calendar import month_name
 from collections import OrderedDict
 from datetime import timedelta
+
+import regex as re
 
 from pywikibot import Page, Site, Timestamp, User
 from pywikibot.exceptions import (EditConflictError, LockedPageError,
@@ -141,19 +142,19 @@ def check_stop_or_resume(c):
         STOPPED_BY = user
         set_status_page(False)
         logger.warning(
-            ("STOPPED by " + user + ".\n"
+            ("STOPPED by {}.\n"
              "    Revid     = {}\n"
              "    Timestamp = {}\n"
-             "    Comment   = {}".format(revid, ts, cmt)))
-    elif cmt.endswith('RESUME') and STOPPED_BY:
-        if user in MAINTAINERS or 'sysop' in groups:
-            STOPPED_BY = None
-            set_status_page(True)
-            logger.warning(
-                ("RESUMED by " + user + ".\n"
-                 "    Revid     = {}\n"
-                 "    Timestamp = {}\n"
-                 "    Comment   = {}".format(revid, ts, cmt)))
+             "    Comment   = {}".format(user, revid, ts, cmt)))
+    elif (cmt.endswith('RESUME') and STOPPED_BY and
+            (user in MAINTAINERS or 'sysop' in groups)):
+        STOPPED_BY = None
+        set_status_page(True)
+        logger.warning(
+            ("RESUMED by {}.\n"
+             "    Revid     = {}\n"
+             "    Timestamp = {}\n"
+             "    Comment   = {}".format(user, revid, ts, cmt)))
 
 
 def recent_changes(start, end):

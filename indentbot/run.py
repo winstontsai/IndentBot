@@ -12,14 +12,19 @@ def get_args():
     parser = argparse.ArgumentParser(
         description=('Bot that helps maintain consistent and correct '
             'indentation in discussion pages on Wikipedia.'))
+
     parser.add_argument('-c', '--chunk', type=int, default=2,
         help='minimum minutes between recent changes checkpoints (default: 2)')
+
     parser.add_argument('-d', '--delay', type=int, default=10,
         help='minimum minutes before fixing a page (default: 10)')
+
     parser.add_argument('-l', '--logfile',
         help='log filename (default: $HOME/logs/indentbot.log)')
-    parser.add_argument('-t', '--total', type=int,
-        help='maximum number of edits to make (default: inf)', default=float('inf'))
+
+    parser.add_argument('-t', '--total', type=int, default=float('inf'),
+        help='maximum number of edits to make (default: inf)')
+    
     parser.add_argument('-v', '--verbose', action='store_true',
         help='print the {{Diff2}} template for successful edits')
     return parser.parse_args()

@@ -1,9 +1,10 @@
 """
 This module defines some reusable regexes/patterns, and some helper functions.
 """
+from calendar import month_name
+
 import regex as re
 
-from calendar import month_name
 ################################################################################
 def pattern_count(pattern, text, flags=0):
     return sum(1 for x in re.finditer(pattern, text, flags))
@@ -58,9 +59,9 @@ def starts_with_prefix_in(text, prefixes):
     return any(text.startswith(x) for x in prefixes)
 
 
-##############################################################################
+################################################################################
 # Helper functions for making regular expressions
-##############################################################################
+################################################################################
 def alternates(l):
     return '(?:' + "|".join(l) + '})'
 
@@ -71,7 +72,8 @@ def template_pattern(name, disambiguator = ''):
     Assumes no nested templates.
     """
     disambiguator = str(disambiguator) # used to prevent duplicate group names
-    z = ''.join(x for x in name if x.isalpha())[:20] + str(len(name)) + disambiguator
+    z = ''.join(x for x in name if x.isalpha())[:20]
+    z += str(len(name)) + disambiguator
     t = r'(?P<template_' + z + r'>{{(?:[^}{]|(?&template_' + z + r'))*}})'
     return r'{{\s*' + name + r'\s*(?:\|(?:[^}}{{]|{t})*)?' + '}}'
 
@@ -80,16 +82,17 @@ def construct_redirects(l):
     """
     Constructs the part of a regular expression which
     allows different options corresponding to the redirects listed in l.
-    For example, if we want to match both "Rotten Tomatoes" and "RottenTomatoes",
+    For example, if we want to match both
+    "Rotten Tomatoes" and "RottenTomatoes",
     use this function with l = ["Rotten Tomatoes", "RottenTomatoes"]
     """
-    redirects = [r"[{}]{}".format(x[0].upper() + x[0].lower(), x[1:]) for x in l]
-    return alternates(redirects)
+    r = [r"[{}]{}".format(x[0].upper() + x[0].lower(), x[1:]) for x in l]
+    return alternates(r)
 
 
-##############################################################################
+################################################################################
 # Helper functions for templates
-##############################################################################
+################################################################################
 def parse_template(template):
     """
     Takes the text of a template and
@@ -120,14 +123,14 @@ def construct_template(name, d):
     return '{{' + name + positional + named + '}}'
 
 
-##############################################################################
+################################################################################
 # Regular expressions
-##############################################################################
+################################################################################
 COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 
-##############################################################################
+################################################################################
 # Constants
-##############################################################################
+################################################################################
 MAINTAINERS = ('IndentBot', 'Notsniwiast')
 
 EDIT_SUMMARY = ('Adjusted indentation. '

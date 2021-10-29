@@ -101,7 +101,7 @@ def line_partition(text):
 
 
 ################################################################################
-# TextFixer class. Fixes text and make the fixed text and "error score"
+# TextFixer class. Fixes text and makes the fixed text and "error score"
 # available as attributes.
 ################################################################################
 class TextFixer:
@@ -153,8 +153,13 @@ class TextFixer:
         """
         Remove gaps sandwiched indented lines.
         A gap is a sequence of blank lines.
-        Set squish to False to KEEP blank lines preceding a line with indent lvl 1.
-        Set single_only to False to remove single-line AND certain multi-line gaps.
+        Set squish to False to KEEP blank lines preceding a lvl 1 line.
+        Set single_only to False to remove certain multi-line gaps.
+
+        Currently if the opening or closing line of a gap starts with '#',
+        the gap is not removed.
+        Otherwise, length 1 gaps are removed, and multiline gaps are
+        removed only if the closing line has lvl >= 2.
         """
         score = 0
         lines = self._lines
@@ -198,9 +203,7 @@ class TextFixer:
 
     def _fix_levels(self):
         """
-        Fix extra indentation.
-
-        lines argument may be altered.
+        Remove over-indentation.
         """
         score = 0
         lines = self._lines
@@ -223,7 +226,7 @@ class TextFixer:
                 l = lines[j]
                 if indent_lvl(l) < y:
                     break
-                lines[j] = l[:x] + l[x + diff - 1:] # cut l[x:y-1] from indentation
+                lines[j] = l[:x] + l[x + diff - 1:] # cut out l[x:y-1]
                 score += diff - 1
 
         self._lines = lines[1:] # don't return the extra line we inserted
@@ -246,7 +249,7 @@ class TextFixer:
             # necessary when using certain strategies to fix indentation lvls
             minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
-            # don't change style of lines starting with a table
+            # don't change style of lines starting with colons and a table
             if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
                 new_indent = old_indent
             # don't change style if it's a small note indented with a colon
@@ -283,59 +286,6 @@ class TextFixer:
                 indent_dict = {0: ''}
         self._lines = new_lines
         return score
-
-    # def _fix_styles2(self):
-    #     """
-    #     Do not mix indent styles. Each line's indentation style must match
-    #     the most recently used indentation style.
-    #     """
-    #     score = 0
-    #     new_lines = []
-    #     prev_lvl = 0
-    #     indent_dict = {0: ''}
-    #     for line in self._lines:
-    #         old_indent = indent_text(line)
-    #         lvl = len(old_indent)
-    #         minlvl = min(lvl, prev_lvl)
-
-    #         # necessary when using certain strategies to fix indentation lvls
-    #         minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
-
-    #         # don't change style of lines starting with a table
-    #         if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
-    #             new_indent = old_indent
-    #         else:
-    #             new_prefix = ''
-    #             p1, p2 = 0, 0
-    #             while p1 < minlvl and p2 < lvl:
-    #                 c1 = indent_dict[minlvl][p1]
-    #                 c2 = line[p2]
-    #                 if c1 == '#':
-    #                     if p2 <= lvl - 3 and line[p2:p2+2] == '::':
-    #                         new_prefix += '#'
-    #                         p2 += 1
-    #                     else:
-    #                         new_prefix += c2
-    #                 elif c2 == '#':
-    #                     new_prefix += c2
-    #                 else:
-    #                     new_prefix += c1
-    #                 p1 += 1
-    #                 p2 += 1
-    #             new_indent = new_prefix + line[p2:lvl]
-
-    #         score += new_indent != old_indent
-    #         new_lines.append(new_indent + line[lvl:])
-    #         prev_lvl = len(new_indent)
-    #         indent_dict[prev_lvl] = new_indent
-
-    #         # reset "memory" if list-breaking newline encountered
-    #         if lvl == 0 or has_linebreaking_newline(new_lines[-1]):
-    #             indent_dict = {0: ''}
-    #     self._lines = new_lines
-    #     return score
-
-
 
 
 if __name__ == '__main__':

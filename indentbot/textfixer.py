@@ -1,3 +1,7 @@
+"""
+This module defines the TextFixer class which takes wikitext and
+makes available the fixed wikitext, along with an error "score", as attributes.
+"""
 import regex as re
 import wikitextparser as wtp
 

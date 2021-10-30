@@ -135,8 +135,8 @@ def check_stop_or_resume(c):
     revid, ts = c['revid'], c['timestamp']
     if title != 'User talk:IndentBot':
         return
-    groups = set(User(SITE, user).groups())
-    if groups.isdisjoint({'autoconfirmed', 'confirmed'}):
+    grps = set(User(SITE, user).groups())
+    if grps.isdisjoint({'extendedconfirmed', 'sysop'}) and user != 'IndentBot':
         return
     if cmt.endswith('STOP') and not STOPPED_BY:
         STOPPED_BY = user
@@ -146,8 +146,7 @@ def check_stop_or_resume(c):
              "    Revid     = {}\n"
              "    Timestamp = {}\n"
              "    Comment   = {}".format(user, revid, ts, cmt)))
-    elif (cmt.endswith('RESUME') and STOPPED_BY and
-            (user in MAINTAINERS or 'sysop' in groups)):
+    elif cmt.endswith('RESUME') and STOPPED_BY:
         STOPPED_BY = None
         set_status_page(True)
         logger.warning(

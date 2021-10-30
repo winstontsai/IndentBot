@@ -24,7 +24,7 @@ def get_args():
 
     parser.add_argument('-t', '--total', type=int, default=float('inf'),
         help='maximum number of edits to make (default: inf)')
-    
+
     parser.add_argument('-v', '--verbose', action='store_true',
         help='print the {{Diff2}} template for successful edits')
     return parser.parse_args()
@@ -60,13 +60,12 @@ def run():
 
 
 if __name__ == '__main__':
+    logger = logging.getLogger('indentbot_logger')
     try:
         indent.set_status_page(True)
         run()
     except BaseException as e:
         indent.set_status_page(False)
-        logging.getLogger('indentbot_logger').error(
-            ('Ending run due to an exception of type '
-             + type(e).__name__ + '.'))
+        logger.error('Ending run due to {}.'.format(type(e).__name__))
         raise
 

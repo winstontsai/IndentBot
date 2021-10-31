@@ -31,9 +31,9 @@ def visual_lvl(line):
 
 def has_linebreaking_newline(line):
     # Return True if line contains a "real" line break besides at the end.
-    # Considers newlines immediately preceding tables, templates, and tags to
-    # be real line breaks.
-    pat = '\n( |' + COMMENT_RE + r')*(\{[{|]|<[^!])'
+    # Considers newlines immediately preceding tables, templates, tags,
+    # and File wikilinks to be real line breaks.
+    pat = '\n( |' + COMMENT_RE + r')*(\{[{|]|<[A-Za-z]|\[\[(?:File|Image):)'
     return bool(re.search(pat, line))
 
 
@@ -54,6 +54,7 @@ def get_bad_spans(text):
     1. newlines before tables
     2. newlines before templates
     3. newlines before tags
+    4. newlines before File wikilinks
     -----------------------
     4. newlines immediately followed by a line consisting of
         spaces and comments only
@@ -84,9 +85,18 @@ def get_bad_spans(text):
         bad_spans.append(m.span())
 
     # whitespace followed by a Category link doesn't break lines
-    for m in re.finditer(r'\s+\[\[Category:', text, flags=re.I):
+    for m in re.finditer(
+            r'(\s|{})+\[\[Category:'.format(COMMENT_RE),
+            text, flags=re.I):
         if '\n' in m[0]:
             bad_spans.append(m.span())
+
+    # newlines preceding links to files
+    for m in re.finditer(
+            r'\n( |{})*\[\[(?:File|Image):'.format(COMMENT_RE),
+            text, flags=re.S):
+        bad_spans.append(m.span())
+
     return bad_spans
 
 
@@ -171,6 +181,7 @@ class TextFixer:
         while i < n:
             txt_i = indent_text(lines[i])
             lvl_i = len(txt_i)
+            # don't care about non-indented lines
             if lvl_i == 0:
                 i += 1
                 continue
@@ -239,7 +250,7 @@ class TextFixer:
     def _fix_styles(self):
         """
         Do not mix indent styles. Each line's indentation style must match
-        the most recently used indentation style.
+        the (roughly) most recently used indentation style.
         """
         score = 0
         new_lines = []
@@ -290,8 +301,4 @@ class TextFixer:
                 indent_dict = {0: ''}
         self._lines = new_lines
         return score
-
-
-if __name__ == '__main__':
-    pass
 

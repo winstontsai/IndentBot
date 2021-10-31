@@ -204,7 +204,7 @@ def continuous_page_generator(chunk, delay):
 
 
 ################################################################################
-# Function to fix and save a page, handling exceptions
+# Function to fix and save a page.
 ################################################################################
 def fix_page(page):
     """

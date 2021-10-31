@@ -134,8 +134,9 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 MAINTAINERS = ('IndentBot', 'Notsniwiast')
 
 EDIT_SUMMARY = ('Adjusted indentation. '
-    '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]]. '
-    'See [[User:IndentBot#Useful links]] for guidelines and more info.')
+    'Trial edit. '
+    'See [[User:IndentBot#Useful links]] for guidelines and more info. '
+    '([[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]])')
 
 MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
 SIGNATURE_PATTERN = (
@@ -155,7 +156,6 @@ NAMESPACES = TALK_SPACES + OTHER_SPACES
 
 # BAD_PREFIXES = ('Wikipedia:Templates for discussion/', )
 BAD_TITLE_PREFIXES = (
-    'Wikipedia:Categories_for_discussion/',
     'Wikipedia:Requests for permissions/',
 )
 

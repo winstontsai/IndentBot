@@ -155,7 +155,6 @@ def check_stop_or_resume(c):
              "    Timestamp = {}\n"
              "    Comment   = {}".format(user, revid, ts, cmt)))
 
-
 def recent_changes(start, end):
     logger.info('Checking edits from {} to {}.'.format(start, end))
     # page cache for this checkpoint
@@ -218,7 +217,7 @@ def fix_page(page):
     title_link = page.title(as_link=True)
     # fix latest version so that there is no edit conflict
     tf = TextFixer(page.get(force=True))
-    if sum(tf.score):
+    if any(tf.score):
         page.text = tf.text
         try:
             page.save(summary=EDIT_SUMMARY,

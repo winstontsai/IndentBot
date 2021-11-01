@@ -1,5 +1,6 @@
 """
 This module defines some reusable regexes/patterns, and some helper functions.
+Also stores constants.
 """
 from calendar import month_name
 
@@ -157,6 +158,7 @@ NAMESPACES = TALK_SPACES + OTHER_SPACES
 # BAD_PREFIXES = ('Wikipedia:Templates for discussion/', )
 BAD_TITLE_PREFIXES = (
     'Wikipedia:Requests for permissions/',
+    'Wikipedia:Categories for discussion/',
 )
 
 TEMPLATE_PREFIXES = ('Template:Did you know nominations/')

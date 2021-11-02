@@ -134,10 +134,9 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 ################################################################################
 MAINTAINERS = ('IndentBot', 'Notsniwiast')
 
-EDIT_SUMMARY = ('Adjusted indentation. '
-    'Trial edit. '
-    'See [[User:IndentBot#Useful links]] for guidelines and more info. '
-    '([[Wikipedia:Bots/Requests for approval/IndentBot|BRFA]])')
+EDIT_SUMMARY = ('Adjusted indentation to improve accessibility and readability. '
+    '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]]. '
+    'See [[User:IndentBot#Useful links]] for guidelines and more info. ')
 
 MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
 SIGNATURE_PATTERN = (

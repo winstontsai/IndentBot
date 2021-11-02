@@ -202,10 +202,9 @@ class TextFixer:
             txt_i = indent_text(lines[i])
             lvl_i = len(txt_i)
             # don't care about non-indented lines
-            if lvl_i == 0:
+            if lvl_i == 0 or has_linebreaking_newline(lines[i]):
                 i += 1
                 continue
-
             # find next non-blank line
             j = i + 1
             while j < n:
@@ -215,15 +214,14 @@ class TextFixer:
                 break
             if j == n:
                 break
-
             txt_j = indent_text(lines[j])
             lvl_j = len(txt_j)
             if lvl_j >= 2 - squish:
-                if txt_j.startswith('#') or txt_i.startswith('#'):
-                    safe_to_remove = False
+                if txt_j.startswith(txt_i) or txt_i.startswith(txt_j):
+                    safe_to_remove = True
                 elif j - i == 2:
                     safe_to_remove = True
-                elif not single_only and lvl_j > 1:
+                elif lvl_j > 1:
                     safe_to_remove = True
                 else:
                     safe_to_remove = False
@@ -253,13 +251,13 @@ class TextFixer:
             # check that visually it is an overindentation
             if visual_lvl(l2) - visual_lvl(l1) <= 1:
                 continue
-
             # if x and lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
             #     diff -= 1
-
             for j in range(i + 1, n):
                 l = lines[j]
                 if indent_lvl(l) < y:
+                    break
+                if '#' in l[x:y-1]:
                     break
                 lines[j] = l[:x] + l[x + diff - 1:] # cut out l[x:y-1]
                 score += diff - 1
@@ -272,26 +270,43 @@ class TextFixer:
         Do not mix indent styles. Each line's indentation style must match
         the (roughly) most recently used indentation style.
         """
-        score = 0
-        score_final = 0
-        new_lines = []
-        prev_lvl = 0
-        indent_dict = {0: ''}
-        for line in self._lines:
+        score, score_final = 0, 0
+        new_lines, prev_lvl, indent_dict = [], 0, {0: ''}
+        for i, line in enumerate(self._lines):
             old_indent = indent_text(line)
             lvl = len(old_indent)
+            if lvl == 0:
+                new_lines.append(line)
+                prev_lvl = 0
+                indent_dict = {0: ''}
+                continue
             minlvl = min(lvl, prev_lvl)
-
             # necessary when using certain strategies to fix indentation lvls
             minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
-            # don't change style of lines starting with colons and a table
-            if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
+            # Don't change style if it's a small note indented with a colon.
+            if re.match(r': ?<small[^>]*> ?Note:', line):
                 new_indent = old_indent
-            # don't change style if it's a small note indented with a colon
-            elif re.match(r': ?<small[^>]*> ?Note:', line):
+            # Don't change style of lines starting with colons and a table,
+            # but remember the style, with the exception that a '*' first char
+            # is preserved.
+            elif re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
                 new_indent = old_indent
+                if indent_dict[minlvl].startswith('*'):
+                    indent_dict[lvl] = '*' + old_indent[1:]
+                else:
+                    indent_dict[lvl] = old_indent
             else:
+                # Determine what last char should be.
+                # When level doesn't increase, it remains the same.
+                # When level increases, we choose bullet or no bullet
+                # so that subsequent lines with the same
+                # level (before a "reset")
+                # will use the most common type (bullet or no bullet).
+                need_to_set_last_char = False
+                if lvl > prev_lvl and old_indent[-1] != '#':
+                    need_to_set_last_char = True
+                    last_char = bulleted_or_unbulleted(self._lines[i:], lvl)
                 new_prefix = ''
                 p1, p2 = 0, 0
                 while p1 < minlvl and p2 < lvl:
@@ -310,19 +325,25 @@ class TextFixer:
                     p1 += 1
                     p2 += 1
                 new_indent = new_prefix + line[p2:lvl]
-
-                # Only store if this line has not been intentionally avoided.
-                # This may need to be adjusted.
+                # set the last char, see above
+                if need_to_set_last_char:
+                    new_indent = new_indent[:-1] + last_char
                 indent_dict[len(new_indent)] = new_indent
 
-            score_final += new_indent[-1:] != old_indent[-1:]
-            score += new_indent != old_indent
             new_lines.append(new_indent + line[lvl:])
-            prev_lvl = len(new_indent)
-
-            # reset "memory" if list-breaking newline encountered
-            if lvl == 0 or has_linebreaking_newline(new_lines[-1]):
+            new_lvl = len(new_indent)
+            # Reset "memory". We intentionally forget higher level indents.
+            if has_linebreaking_newline(new_lines[-1]):
                 indent_dict = {0: ''}
+            elif new_lvl < prev_lvl:
+                for key in list(indent_dict.keys()):
+                    if key > new_lvl:
+                        del indent_dict[key]
+            prev_lvl = new_lvl
+
+            score += new_indent != old_indent
+            score_final += new_indent[-1] != old_indent[-1]
+
         self._lines = new_lines
         return score, score_final
 
@@ -330,6 +351,7 @@ class TextFixer:
 
 ################################################################################
 # VERSION TWO
+# Used for testing improvements.
 ################################################################################
 class TextFixerTWO:
     def __init__(self, text):
@@ -390,10 +412,9 @@ class TextFixerTWO:
             txt_i = indent_text(lines[i])
             lvl_i = len(txt_i)
             # don't care about non-indented lines
-            if lvl_i == 0:
+            if lvl_i == 0 or has_linebreaking_newline(lines[i]):
                 i += 1
                 continue
-
             # find next non-blank line
             j = i + 1
             while j < n:
@@ -403,15 +424,14 @@ class TextFixerTWO:
                 break
             if j == n:
                 break
-
             txt_j = indent_text(lines[j])
             lvl_j = len(txt_j)
             if lvl_j >= 2 - squish:
-                if txt_j.startswith('#') or txt_i.startswith('#'):
-                    safe_to_remove = False
+                if txt_j.startswith(txt_i) or txt_i.startswith(txt_j):
+                    safe_to_remove = True
                 elif j - i == 2:
                     safe_to_remove = True
-                elif not single_only and lvl_j > 1:
+                elif lvl_j > 1:
                     safe_to_remove = True
                 else:
                     safe_to_remove = False
@@ -441,13 +461,13 @@ class TextFixerTWO:
             # check that visually it is an overindentation
             if visual_lvl(l2) - visual_lvl(l1) <= 1:
                 continue
-
             # if x and lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
             #     diff -= 1
-
             for j in range(i + 1, n):
                 l = lines[j]
                 if indent_lvl(l) < y:
+                    break
+                if '#' in l[x:y-1]:
                     break
                 lines[j] = l[:x] + l[x + diff - 1:] # cut out l[x:y-1]
                 score += diff - 1
@@ -460,29 +480,32 @@ class TextFixerTWO:
         Do not mix indent styles. Each line's indentation style must match
         the (roughly) most recently used indentation style.
         """
-        score = 0
-        score_final = 0
-        new_lines = []
-        prev_lvl = 0
-        indent_dict = {0: ''}
+        score, score_final = 0, 0
+        new_lines, prev_lvl, indent_dict = [], 0, {0: ''}
         for i, line in enumerate(self._lines):
             old_indent = indent_text(line)
             lvl = len(old_indent)
             if lvl == 0:
                 new_lines.append(line)
                 prev_lvl = 0
+                indent_dict = {0: ''}
                 continue
-
             minlvl = min(lvl, prev_lvl)
             # necessary when using certain strategies to fix indentation lvls
             minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
-            # don't change style of lines starting with colons and a table
-            if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
+            # Don't change style if it's a small note indented with a colon.
+            if re.match(r': ?<small[^>]*> ?Note:', line):
                 new_indent = old_indent
-            # don't change style if it's a small note indented with a colon
-            elif re.match(r': ?<small[^>]*> ?Note:', line):
+            # Don't change style of lines starting with colons and a table,
+            # but remember the style, with the exception that a '*' first char
+            # is preserved.
+            elif re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
                 new_indent = old_indent
+                if indent_dict[minlvl].startswith('*'):
+                    indent_dict[lvl] = '*' + old_indent[1:]
+                else:
+                    indent_dict[lvl] = old_indent
             else:
                 # Determine what last char should be.
                 # When level doesn't increase, it remains the same.
@@ -494,7 +517,6 @@ class TextFixerTWO:
                 if lvl > prev_lvl and old_indent[-1] != '#':
                     need_to_set_last_char = True
                     last_char = bulleted_or_unbulleted(self._lines[i:], lvl)
-
                 new_prefix = ''
                 p1, p2 = 0, 0
                 while p1 < minlvl and p2 < lvl:
@@ -513,23 +535,25 @@ class TextFixerTWO:
                     p1 += 1
                     p2 += 1
                 new_indent = new_prefix + line[p2:lvl]
-
                 # set the last char, see above
                 if need_to_set_last_char:
                     new_indent = new_indent[:-1] + last_char
-
-                # Only store if this line has not been intentionally avoided.
-                # This may need to be adjusted.
                 indent_dict[len(new_indent)] = new_indent
 
-            score_final += new_indent[-1] != old_indent[-1]
-            score += new_indent != old_indent
             new_lines.append(new_indent + line[lvl:])
-            prev_lvl = len(new_indent)
-
-            # reset "memory" if list-breaking newline encountered
+            new_lvl = len(new_indent)
+            # Reset "memory". We intentionally forget higher level indents.
             if has_linebreaking_newline(new_lines[-1]):
                 indent_dict = {0: ''}
+            elif new_lvl < prev_lvl:
+                for key in list(indent_dict.keys()):
+                    if key > new_lvl:
+                        del indent_dict[key]
+            prev_lvl = new_lvl
+
+            score += new_indent != old_indent
+            score_final += new_indent[-1] != old_indent[-1]
+
         self._lines = new_lines
         return score, score_final
 

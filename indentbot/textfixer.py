@@ -112,6 +112,7 @@ def bulleted_or_unbulleted2(start, lines, owner, final_indent):
         if lvl == level and final_indent[i] == 's':
             final_indent[i] = char
 
+
 ################################################################################
 # Line partitioning functions.
 # Not every newline should be used to delimit a line for lists.
@@ -443,6 +444,9 @@ class TextFixerTWO(TextFixer):
             prev_lvl = z
         #print(final_indent)
 
+        # At this point, the final indentation character for every line
+        # should have been determined and is stored in final_indent.
+
         score, score_final = 0, 0
         new_lines, prev_lvl, indent_dict = [], 0, {0: ''}
         for i, line in enumerate(lines):
@@ -483,20 +487,20 @@ class TextFixerTWO(TextFixer):
                 # Set the final indent char
                 new_indent = new_indent[:-1] + final_indent[i]
 
+            if new_lines and has_linebreaking_newline(new_lines[-1]):
+                new_indent = new_indent[:-1].replace('*', ':') + new_indent[-1]
+
             new_lines.append(new_indent + line[lvl:])
             new_lvl = len(new_indent)
-
             indent_dict[new_lvl] = new_indent
             # Reset "memory". We intentionally forget higher level indents.
             if has_linebreaking_newline(new_lines[-1]):
                 indent_dict = {0: ''}
             elif new_lvl < prev_lvl:
                 remove_keys_greater_than(new_lvl, indent_dict)
-
             prev_lvl = new_lvl
             score += new_indent != old_indent
             score_final += new_indent[-1] != old_indent[-1]
-
         self._lines = new_lines
         return score, score_final
 
@@ -507,3 +511,4 @@ class TextFixerTWO(TextFixer):
 ################################################################################
 class TextFixerTHREE(TextFixer):
     pass
+

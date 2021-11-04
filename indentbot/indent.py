@@ -136,7 +136,8 @@ def check_stop_or_resume(c):
     if title != 'User talk:IndentBot':
         return
     grps = set(User(SITE, user).groups())
-    if grps.isdisjoint({'extendedconfirmed', 'sysop'}) and user != 'IndentBot':
+    ALLOWED_GRPS = {'extendedconfirmed', 'sysop'}
+    if grps.isdisjoint(ALLOWED_GRPS) and user not in MAINTAINERS:
         return
     if cmt.endswith('STOP') and not STOPPED_BY:
         STOPPED_BY = user
@@ -156,7 +157,11 @@ def check_stop_or_resume(c):
              "    Comment   = {}".format(user, revid, ts, cmt)))
 
 def recent_changes(start, end):
-    logger.info('Checking edits from {} to {}.'.format(start, end))
+    if STOPPED_BY:
+        logger.info('(IndentBot edits paused.) '
+            'Checking edits from {} to {}.'.format(start, end))
+    else:
+        logger.info('Checking edits from {} to {}.'.format(start, end))
     # page cache for this checkpoint
     cache = dict()
     for change in SITE.recentchanges(
@@ -216,7 +221,7 @@ def fix_page(page):
     title = page.title()
     title_link = page.title(as_link=True)
     # fix latest version so that there is no edit conflict
-    tf = TextFixer(page.get(force=True))
+    tf = TextFixerTWO(page.get(force=True))
     if any(tf.score):
         page.text = tf.text
         try:

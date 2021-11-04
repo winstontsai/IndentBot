@@ -2,7 +2,7 @@
 This module defines some reusable regexes/patterns, and some helper functions.
 Also stores constants.
 """
-from calendar import month_name
+from calendar import month_name, month_abbr
 
 import regex as re
 
@@ -64,7 +64,7 @@ def starts_with_prefix_in(text, prefixes):
 # Helper functions for making regular expressions
 ################################################################################
 def alternates(l):
-    return '(?:' + "|".join(l) + '})'
+    return '(?:' + "|".join(l) + ')'
 
 
 def template_pattern(name, disambiguator = ''):
@@ -138,12 +138,15 @@ EDIT_SUMMARY = ('Adjusted indentation to improve accessibility. '
     '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]]. '
     'See [[User:IndentBot#Useful links]] for guidelines and more info. ')
 
-MONTH_TO_INT = {month: i + 1 for i, month in enumerate(month_name[1:])}
+# MONTH_NAMES = month_name[1:]
+# MONTH_ABBRS = month_abbr[1:]
+# MONTH_TO_INT = {month: i + 1 for i, month in enumerate(MONTH_NAMES)}
+# MONTH_TO_INT.update({month: i + 1 for i, month in enumerate(MONTH_ABBRS)})
 SIGNATURE_PATTERN = (
     r'\[\[[Uu]ser(?: talk)?:[^\n]+?' +                  # user page link
     r'([0-2]\d):([0-5]\d), ' +                          # hh:mm
     r'([1-3]?\d) ' +                                    # day
-    '(' + "|".join(m for m in MONTH_TO_INT) + ') ' +    # month name
+    '(' + '|'.join(month_name[1:] + month_abbr[1:]) + ') ' +  # month name
     r'(2\d{3}) \(UTC\)'                                 # yyyy
 )
 # Talk, User talk, Wikipedia talk, File talk, Mediawiki talk,

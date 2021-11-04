@@ -6,7 +6,7 @@ import logging
 import sys
 import time
 
-from calendar import month_name
+from calendar import month_name, month_abbr
 from collections import OrderedDict
 from datetime import timedelta
 

@@ -134,7 +134,7 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 ################################################################################
 MAINTAINERS = ('IndentBot', 'Notsniwiast')
 
-EDIT_SUMMARY = ('Adjusted indentation to improve accessibility and readability. '
+EDIT_SUMMARY = ('Adjusted indentation to improve accessibility. '
     '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]]. '
     'See [[User:IndentBot#Useful links]] for guidelines and more info. ')
 

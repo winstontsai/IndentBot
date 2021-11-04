@@ -5,7 +5,8 @@ makes available the fixed wikitext, along with an error "score", as attributes.
 import regex as re
 import wikitextparser as wtp
 
-from patterns import COMMENT_RE, in_span
+from patterns import COMMENT_RE, SIGNATURE_PATTERN
+from patterns import in_span
 
 ################################################################################
 # Helper functions
@@ -46,9 +47,10 @@ def bulleted_or_unbulleted(lines, level):
     is reached, use '*' or ':' as the final indentation character.
     It returns the character that wins the count, preferring '*'
     when there is a tie.
+
+    The first line in lines should have a final indent character in ':*'.
     """
-    bulleted = 0
-    unbulleted = 0
+    bulleted, unbulleted = 0, 0
     for line in lines:
         s = indent_text(line)
         lvl = len(s)
@@ -59,7 +61,53 @@ def bulleted_or_unbulleted(lines, level):
                 unbulleted += 1
             elif s[-1] == '*':
                 bulleted += 1
-    return '*' if bulleted >= unbulleted else ':'
+            else:
+                break
+    if bulleted > unbulleted:
+        return '*'
+    if bulleted < unbulleted:
+        return ':'
+    return indent_text(lines[0])[-1]
+
+def remove_keys_greater_than(d, num):
+    for key in list(d.keys()):
+        if key > num:
+            del d[key]
+
+
+def bulleted_or_unbulleted2(lines, owner):
+    """
+    Helper function for TextFixer._fix_styles.
+    This function basically counts how many lines of the given level (which
+    should be greater than 0),
+    starting from the first line and continuing until a line with smaller level
+    is reached, use '*' or ':' as the final indentation character.
+    It returns the character that wins the count, preferring '*'
+    when there is a tie.
+
+    The first line in lines should have a final indent character in ':*'.
+    """
+    level = indent_lvl(lines[0])
+    bulleted, unbulleted = 0, 0
+    for i, line in enumerate(lines):
+        s = indent_text(line)
+        lvl = len(s)
+        if lvl < level:
+            break
+        elif lvl == level:
+            if s[-1] == '#':
+                break
+            if i and owner[i - 1] == owner[i]:
+                continue
+            if s[-1] == ':':
+                unbulleted += 1
+            else:
+                bulleted += 1
+    if bulleted > unbulleted:
+        return '*'
+    if bulleted < unbulleted:
+        return ':'
+    return indent_text(lines[0])[-1]
 
 
 ################################################################################
@@ -204,7 +252,7 @@ class TextFixer:
             txt_i = indent_text(lines[i])
             lvl_i = len(txt_i)
             # don't care about non-indented lines
-            if lvl_i == 0 or has_linebreaking_newline(lines[i]):
+            if lvl_i == 0:
                 i += 1
                 continue
             # find next non-blank line
@@ -219,11 +267,12 @@ class TextFixer:
             txt_j = indent_text(lines[j])
             lvl_j = len(txt_j)
             if lvl_j >= 2 - squish:
-                if txt_j.startswith(txt_i) or txt_i.startswith(txt_j):
+                if (txt_j.startswith(txt_i) or txt_i.startswith(txt_j)
+                        or lvl_j > 1):
                     safe_to_remove = True
+                elif '#' in txt_j + txt_i[0]:
+                    safe_to_remove = False
                 elif j - i == 2:
-                    safe_to_remove = True
-                elif lvl_j > 1:
                     safe_to_remove = True
                 else:
                     safe_to_remove = False
@@ -257,9 +306,10 @@ class TextFixer:
             #     diff -= 1
             for j in range(i + 1, n):
                 l = lines[j]
-                if indent_lvl(l) < y:
+                z = indent_lvl(l)
+                if z < y:
                     break
-                if '#' in l[x:y-1]:
+                if '#' in l[x:y-1] and l[y-1] != '#':
                     break
                 lines[j] = l[:x] + l[x + diff - 1:] # cut out l[x:y-1]
                 score += diff - 1
@@ -286,18 +336,11 @@ class TextFixer:
             # necessary when using certain strategies to fix indentation lvls
             minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
-            # Don't change style if it's a small note indented with a colon.
-            if re.match(r': ?<small[^>]*> ?Note:', line):
-                new_indent = old_indent
             # Don't change style of lines starting with colons and a table,
-            # but remember the style, with the exception that a '*' first char
-            # is preserved.
-            elif re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
+            # but remember the style
+            if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
                 new_indent = old_indent
-                if indent_dict[minlvl].startswith('*'):
-                    indent_dict[lvl] = '*' + old_indent[1:]
-                else:
-                    indent_dict[lvl] = old_indent
+                indent_dict[lvl] = old_indent
             else:
                 # Determine what last char should be.
                 # When level doesn't increase, it remains the same.
@@ -356,40 +399,213 @@ class TextFixer:
 # Used for testing improvements.
 ################################################################################
 class TextFixerTWO(TextFixer):
-
-    def _fix_levels(self):
+    def _fix_styles(self):
         """
-        Remove over-indentation.
+        Do not mix indent styles. Each line's indentation style must match
+        the (roughly) most recently used indentation style.
         """
-        score = 0
         lines = self._lines
-        lines.insert(0, '\n') # for handling first line edge case
-        n = len(lines)
-        for i in range(n - 1):
-            l1, l2 = lines[i:i+2]
-            x, y = indent_lvl(l1), indent_lvl(l2)
-            diff = y - x
-            if diff <= 1:
+
+        # Record change in ownership of lines (using 1 and 0 to denote owners).
+        # The first line is given an owner. Then whenever a line contains a sig,
+        # the next line is given a different owner.
+        # We treat level 0 to level 1 as a change in owner as well.
+        owner = [1]
+        prev_lvl = 0
+        for i, line in enumerate(lines[1:]):
+            z = indent_lvl(line)
+            if z > 0 == prev_lvl or re.search(SIGNATURE_PATTERN, lines[i]):
+                owner.append(1 - owner[-1])
+            else:
+                owner.append(owner[-1])
+            prev_lvl = z
+        # print(owner)
+
+        score, score_final = 0, 0
+        new_lines, prev_lvl, indent_dict = [], 0, {0: ''}
+        working_dict = dict(indent_dict)
+        for i, line in enumerate(lines):
+            old_indent = indent_text(line)
+            lvl = len(old_indent)
+            if lvl == 0:
+                new_lines.append(line)
+                prev_lvl = 0
+                indent_dict = {0: ''}
+                working_dict = dict(indent_dict)
                 continue
-            # check that visually it is an overindentation
-            if visual_lvl(l2) - visual_lvl(l1) <= 1:
+            minlvl = min(lvl, prev_lvl)
+            # necessary when using certain strategies to fix indentation lvls
+            #minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
+            minlvl = next(k for k in range(minlvl, -1, -1) if k in working_dict)
+
+            # Don't change style of lines starting with colons and a table,
+            # but remember the style
+            if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
+                new_indent = old_indent
+            else:
+                new_prefix = ''
+                p1, p2 = 0, 0
+                while p1 < minlvl and p2 < lvl:
+                    c1 = working_dict[minlvl][p1]
+                    c2 = line[p2]
+                    if c1 == '#':
+                        if p2 <= lvl - 3 and line[p2:p2+2] == '::':
+                            new_prefix += '#'
+                            p2 += 1
+                        else:
+                            new_prefix += c2
+                    elif c2 == '#':
+                        new_prefix += c2
+                    else:
+                        new_prefix += c1
+                    p1 += 1
+                    p2 += 1
+                new_indent = new_prefix + line[p2:lvl]
+                # If owner didn't change, keep the last indent char.
+                if i and owner[i - 1] == owner[i]:
+                    new_indent = new_indent[:-1] + old_indent[-1]
+                # Set the last indent char.
+                elif lvl > prev_lvl and old_indent[-1] != '#':
+                    last_char = bulleted_or_unbulleted2(lines[i:], owner[i:])
+                    new_indent = new_indent[:-1] + last_char
+
+            new_lines.append(new_indent + line[lvl:])
+            new_lvl = len(new_indent)
+            # Only record indent style in the global dictionary
+            # if the line is the start of a new owner.
+            if i == 0 or owner[i - 1] != owner[i]:
+                indent_dict[new_lvl] = new_indent
+                # Reset "memory". We intentionally forget higher level indents.
+                if has_linebreaking_newline(new_lines[-1]):
+                    indent_dict = {0: ''}
+                elif new_lvl < prev_lvl:
+                    remove_keys_greater_than(indent_dict, new_lvl)
+
+            # Reset working dictionary back to global dictionary
+            # if the line is the end of an owner.
+            if i + 1 < len(lines) and owner[i] != owner[i + 1]:
+                working_dict = dict(indent_dict)
+            # Otherwise, record in working dictionary
+            else:
+                working_dict[new_lvl] = new_indent
+                # Reset "memory". We intentionally forget higher level indents.
+                if has_linebreaking_newline(new_lines[-1]):
+                    working_dict = {0: ''}
+                elif new_lvl < prev_lvl:
+                    remove_keys_greater_than(working_dict, new_lvl)
+
+            prev_lvl = new_lvl
+            score += new_indent != old_indent
+            score_final += new_indent[-1] != old_indent[-1]
+
+        self._lines = new_lines
+        return score, score_final
+
+
+################################################################################
+# VERSION TWO
+# Used for testing improvements.
+################################################################################
+class TextFixerTHREE(TextFixer):
+    def _fix_styles(self):
+        """
+        Do not mix indent styles. Each line's indentation style must match
+        the (roughly) most recently used indentation style.
+        """
+        lines = self._lines
+
+        # Record change in ownership of lines (using 1 and 0 to denote owners).
+        # The first line is given an owner. Then whenever a line contains a sig,
+        # the next line is given a different owner.
+        # We treat level 0 to level 1 as a change in owner as well.
+        owner = [1]
+        prev_lvl = 0
+        for i, line in enumerate(lines[1:]):
+            z = indent_lvl(line)
+            if z > 0 == prev_lvl or re.search(SIGNATURE_PATTERN, lines[i]):
+                owner.append(1 - owner[-1])
+            else:
+                owner.append(owner[-1])
+            prev_lvl = z
+        # print(owner)
+
+        score, score_final = 0, 0
+        new_lines, prev_lvl, indent_dict = [], 0, {0: ''}
+        working_dict = dict(indent_dict)
+        for i, line in enumerate(lines):
+            old_indent = indent_text(line)
+            lvl = len(old_indent)
+            if lvl == 0:
+                new_lines.append(line)
+                prev_lvl = 0
+                indent_dict = {0: ''}
+                working_dict = dict(indent_dict)
                 continue
-            # if x and lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
-            #     diff -= 1
-            for j in range(i + 1, n):
-                l = lines[j]
-                if indent_lvl(l) < y:
-                    break
-                if '#' in l[x:y-1] and l[y-1] != '#':
-                    break
-                lines[j] = l[:x] + l[x + diff - 1:] # cut out l[x:y-1]
-                score += diff - 1
+            minlvl = min(lvl, prev_lvl)
+            # necessary when using certain strategies to fix indentation lvls
+            #minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
+            minlvl = next(k for k in range(minlvl, -1, -1) if k in working_dict)
 
-        self._lines = lines[1:] # don't return the extra line we inserted
-        return score
+            # Don't change style of lines starting with colons and a table,
+            # but remember the style
+            if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
+                new_indent = old_indent
+            else:
+                new_prefix = ''
+                p1, p2 = 0, 0
+                while p1 < minlvl and p2 < lvl:
+                    c1 = working_dict[minlvl][p1]
+                    c2 = line[p2]
+                    if c1 == '#':
+                        if p2 <= lvl - 3 and line[p2:p2+2] == '::':
+                            new_prefix += '#'
+                            p2 += 1
+                        else:
+                            new_prefix += c2
+                    elif c2 == '#':
+                        new_prefix += c2
+                    else:
+                        new_prefix += c1
+                    p1 += 1
+                    p2 += 1
+                new_indent = new_prefix + line[p2:lvl]
+                # If owner didn't change, keep the last indent char.
+                if i and owner[i - 1] == owner[i]:
+                    new_indent = new_indent[:-1] + old_indent[-1]
+                # Set the last indent char.
+                elif lvl > prev_lvl and old_indent[-1] != '#':
+                    last_char = bulleted_or_unbulleted2(lines[i:], owner[i:])
+                    new_indent = new_indent[:-1] + last_char
 
+            new_lines.append(new_indent + line[lvl:])
+            new_lvl = len(new_indent)
+            # Only record indent style in the global dictionary
+            # if the line is the start of a new owner.
+            if i == 0 or owner[i - 1] != owner[i]:
+                indent_dict[new_lvl] = new_indent
+                # Reset "memory". We intentionally forget higher level indents.
+                if has_linebreaking_newline(new_lines[-1]):
+                    indent_dict = {0: ''}
+                elif new_lvl < prev_lvl:
+                    remove_keys_greater_than(indent_dict, new_lvl)
 
+            # Reset working dictionary back to global dictionary
+            # if the level DROPS back to a global level and owner change
+            if new_lvl <= prev_lvl and i + 1 < len(lines) and owner[i] != owner[i + 1]:
+                working_dict = dict(indent_dict)
+            # Otherwise, record in working dictionary
+            else:
+                working_dict[new_lvl] = new_indent
+                # Reset "memory". We intentionally forget higher level indents.
+                if has_linebreaking_newline(new_lines[-1]):
+                    working_dict = {0: ''}
+                elif new_lvl < prev_lvl:
+                    remove_keys_greater_than(working_dict, new_lvl)
 
+            prev_lvl = new_lvl
+            score += new_indent != old_indent
+            score_final += new_indent[-1] != old_indent[-1]
 
-
+        self._lines = new_lines
+        return score, score_final
 

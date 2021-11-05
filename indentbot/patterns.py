@@ -132,7 +132,7 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 ################################################################################
 # Constants
 ################################################################################
-MAINTAINERS = ('IndentBot', 'Notsniwiast')
+MAINTAINERS = frozenset(['IndentBot', 'Notsniwiast'])
 
 EDIT_SUMMARY = ('Adjusted indentation to improve accessibility. '
     '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]]. '
@@ -158,21 +158,50 @@ OTHER_SPACES = (4, 10)
 NAMESPACES = TALK_SPACES + OTHER_SPACES
 
 # BAD_PREFIXES = ('Wikipedia:Templates for discussion/', )
-BAD_TITLE_PREFIXES = (
+BAD_TITLE_PREFIXES = frozenset([
     'Wikipedia:Requests for permissions/',
     'Wikipedia:Categories for discussion/',
-)
+])
 
-TEMPLATE_PREFIXES = ('Template:Did you know nominations/')
+TEMPLATE_PREFIXES = frozenset(['Template:Did you know nominations/'])
 
-SANDBOXES = (
+SANDBOXES = frozenset([
     'Wikipedia:Sandbox',
     'Wikipedia talk:Sandbox',
     'Wikipedia:Articles for creation/AFC sandbox',
     'User talk:Sandbox',
     'User talk:Sandbox for user warnings',
     'User:Sandbox',
-)
+])
+
+PARSER_EXTENSION_TAGS = frozenset(['categorytree', 'ce', 'charinsert', 'chem',
+    'dynamicpagelist', 'gallery', 'graph', 'hiero', 'imagemap', 'indicator',
+    'inputbox', 'langconvert', 'languages', 'mapframe', 'maplink', 'math',
+    'nowiki', 'poem', 'pre', 'ref', 'references', 'rss', 'score', 'section',
+    'source', 'syntaxhighlight', 'templatedata', 'templatestyles', 'timeline'])
+
+"""Does a newline in this thing break a list? As determined by
+* Hi <tag>
+Some stuff</tag>
+** Bye.
+
+???
+If NO, then we shouldn't split on newlines inside them.
+If YES, then we SHOULD split on newlines inside them
+
+HOWEVER: For all things (templates, tags, tables), we should not split
+on newlines immediately preceding them FOR FIX_LEVELS ONLY.
+
+NEWLINES IN THESE THINGS DO NOT BREAK LISTS:
+comments, templates, gallery, includeonly, nowiki, categorytree, chem, ce,
+graph, heiro, imagemap, indicator, inputbox, mapframe, maplink, math,
+math chem, ref, score, syntaxhighlight, source, templatedata, 
+"""
+NON_BREAKING_TAGS = frozenset(['gallery', 'includeonly', 'nowiki',
+    'categorytree', 'chem', 'ce', 'graph', 'heiro', 'imagemap', 'indicator',
+    'inputbox', 'mapframe', 'maplink', 'math', 'math chem', 'ref', 'score',
+    'syntaxhighlight', 'source', 'templatedata'])
+
 
 if __name__ == "__main__":
     pass

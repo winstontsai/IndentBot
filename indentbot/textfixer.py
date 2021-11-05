@@ -5,13 +5,12 @@ makes available the fixed wikitext, along with an error "score", as attributes.
 import regex as re
 import wikitextparser as wtp
 
-from patterns import COMMENT_RE, SIGNATURE_PATTERN
+from patterns import COMMENT_RE, NON_BREAKING_TAGS, SIGNATURE_PATTERN
 from patterns import in_span
 
 ################################################################################
 # Helper functions
 ################################################################################
-
 def is_blank_line(line):
     return bool(re.fullmatch(r'\s+', line))
 
@@ -36,6 +35,12 @@ def has_linebreaking_newline(line):
     # and File wikilinks to be real line breaks.
     pat = '\n( |' + COMMENT_RE + r')*(\{[{|]|<[^!]|\[\[(?:File|Image):)'
     return bool(re.search(pat, line))
+
+
+def remove_keys_greater_than(num, d):
+    for key in list(d.keys()):
+        if key > num:
+            del d[key]
 
 
 def bulleted_or_unbulleted(lines, level):
@@ -68,11 +73,6 @@ def bulleted_or_unbulleted(lines, level):
     if bulleted < unbulleted:
         return ':'
     return indent_text(lines[0])[-1]
-
-def remove_keys_greater_than(num, d):
-    for key in list(d.keys()):
-        if key > num:
-            del d[key]
 
 def is_first_line(owner, j):
     if j == 0:
@@ -117,7 +117,7 @@ def bulleted_or_unbulleted2(start, lines, owner, final_indent):
 # Line partitioning functions.
 # Not every newline should be used to delimit a line for lists.
 ################################################################################
-def get_bad_spans(text):
+def line_partition(text):
     """
     We want to split on newline characters
     except those which satisfy at least one of the following:
@@ -173,11 +173,86 @@ def get_bad_spans(text):
             text, flags=re.S):
         bad_spans.append(m.span())
 
-    return bad_spans
+    # Now partition into lines.
+    prev, lines = 0, []
+    for i, c in enumerate(text):
+        if c != '\n':
+            continue
+        if all(not in_span(i, s) for s in bad_spans):
+            lines.append(text[prev:i + 1])
+            prev = i + 1
+    # Wikipedia strips newlines from the end, so add final line.
+    # If text does have newline at the end, this is harmless since it
+    # just adds an empty string.
+    lines.append(text[prev:])
+    return lines
 
 
-def line_partition(text):
-    bad_spans = get_bad_spans(text)
+def line_partition2(text, bad_type):
+    """
+    We want to split on newline characters
+    except those which satisfy at least one of the following:
+    1) Editors may not want the list to break there, and they logically
+        continue the same list after whatever was introduced on that line
+        (usually using colon indentation)
+    2) Mediawiki doesn't treat it as breaking a list.
+
+    So, we break on all newlines EXCEPT
+    1. newlines before tables
+    2. newlines before templates
+    3. newlines before tags
+    4. newlines before File wikilinks
+    -----------------------
+    4. newlines immediately followed by a line consisting of
+        spaces and comments only
+    5. newlines that are part of a segment of whitespace
+        immediately preceding a category link
+    6. ?????
+    """
+    wt = wtp.parse(text)
+    bad_spans = []
+    if bad_type != 'styles':
+        for x in wt.tables + wt.templates + wt.get_tags():
+            i, j = x.span
+            m = re.search(r'\n( |{})*\Z'.format(COMMENT_RE), text[:i])
+            if m:
+                i = m.start()
+            if '\n' in text[i:j]:
+                bad_spans.append((i, j))
+
+        # newlines preceding links to files
+        for m in re.finditer(
+                r'\n( |{})*\[\[(?:File|Image):'.format(COMMENT_RE),
+                text, flags=re.S):
+            bad_spans.append(m.span())
+    else:
+        for x in wt.templates:
+            if '\n' in str(x):
+                bad_spans.append(x.span)
+        for x in wt.get_tags():
+            if x.name not in NON_BREAKING_TAGS:
+                continue
+            if '\n' in str(x):
+                bad_spans.append(x.span)
+
+    for x in wt.comments:
+        if '\n' in str(x):
+            bad_spans.append(x.span)
+
+    # newline followed by line consisting of spaces and comments ONLY
+    for m in re.finditer(
+            r'\n *{}( |{})*(?=\n)'.format(COMMENT_RE, COMMENT_RE),
+            text, flags=re.S):
+        bad_spans.append(m.span())
+
+    # whitespace followed by a Category link doesn't break lines
+    for m in re.finditer(
+            r'(\s|{})+\[\[Category:'.format(COMMENT_RE),
+            text, flags=re.I):
+        if '\n' in m[0]:
+            bad_spans.append(m.span())
+
+    # Now partition into lines.
     prev, lines = 0, []
     for i, c in enumerate(text):
         if c != '\n':
@@ -396,19 +471,24 @@ class TextFixer:
         return score, score_final
 
 
-
 ################################################################################
 # VERSION TWO
 # Used for testing improvements.
 ################################################################################
 class TextFixerTWO(TextFixer):
+    def fix(self, text):
+        self._original_text = text
+        self._lines = line_partition2(text, bad_type='gaps')
+        a, b, c, d = self._fix_gaps(), self._fix_levels(), *self._fix_styles()
+        score = [a, b, c, d]
+        self._score = tuple(score)
+
     def _fix_styles(self):
         """
         Fixes mixed indent styles.
         """
-        lines = self._lines
+        lines = line_partition2(self.text, bad_type='styles')
         num_lines = len(lines)
-
         # Record change in ownership of lines (using 1 and 0 to denote owners).
         # Whenever a line contains a sig,
         # the next line is given a different owner.
@@ -422,8 +502,7 @@ class TextFixerTWO(TextFixer):
             else:
                 owner.append(owner[-1])
             prev_lvl = z
-        #print(owner)
-
+        # print(owner)
         final_indent = [None] * num_lines
         for i, line in enumerate(lines):
             itxt = indent_text(line)
@@ -435,7 +514,6 @@ class TextFixerTWO(TextFixer):
             else:
                 final_indent[i] = 's' # stands for "solo"
         #print(final_indent)
-
         prev_lvl = 0
         for i, line in enumerate(lines):
             z = indent_lvl(line)
@@ -446,7 +524,6 @@ class TextFixerTWO(TextFixer):
 
         # At this point, the final indentation character for every line
         # should have been determined and is stored in final_indent.
-
         score, score_final = 0, 0
         new_lines, prev_lvl, indent_dict = [], 0, {0: ''}
         for i, line in enumerate(lines):
@@ -487,28 +564,15 @@ class TextFixerTWO(TextFixer):
                 # Set the final indent char
                 new_indent = new_indent[:-1] + final_indent[i]
 
-            if new_lines and has_linebreaking_newline(new_lines[-1]):
-                new_indent = new_indent[:-1].replace('*', ':') + new_indent[-1]
-
             new_lines.append(new_indent + line[lvl:])
             new_lvl = len(new_indent)
             indent_dict[new_lvl] = new_indent
             # Reset "memory". We intentionally forget higher level indents.
-            if has_linebreaking_newline(new_lines[-1]):
-                indent_dict = {0: ''}
-            elif new_lvl < prev_lvl:
+            if new_lvl < prev_lvl:
                 remove_keys_greater_than(new_lvl, indent_dict)
             prev_lvl = new_lvl
             score += new_indent != old_indent
             score_final += new_indent[-1] != old_indent[-1]
         self._lines = new_lines
         return score, score_final
-
-
-################################################################################
-# VERSION THREE
-# Used for testing improvements.
-################################################################################
-class TextFixerTHREE(TextFixer):
-    pass
 

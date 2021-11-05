@@ -19,7 +19,7 @@ from pywikibot.exceptions import (EditConflictError, LockedPageError,
 from patterns import (BAD_TITLE_PREFIXES, MAINTAINERS, NAMESPACES, SANDBOXES,
                       SIGNATURE_PATTERN, TEMPLATE_PREFIXES)
 from patterns import starts_with_prefix_in
-from textfixer import TextFixer
+from textfixer import TextFixer, TextFixerTWO
 
 ################################################################################
 
@@ -52,8 +52,7 @@ def diff_template(page, title=True):
     x = '{{Diff2|' + str(page.latest_revision_id)
     if title:
         x += '|' + page.title()
-    x += '}}'
-    return x
+    return x + '}}'
 
 ################################################################################
 # Functions to create continuous generator of pages to edit
@@ -64,10 +63,7 @@ def is_sandbox(title):
     """
     if title in SANDBOXES:
         return True
-
-    if re.search(r'/[sS]andbox(?: ?\d+)?(?:/|\Z)', title):
-        return True
-    return False
+    return bool(re.search(r'/[sS]andbox(?: ?\d+)?(?:/|\Z)', title))
 
 
 def is_valid_template_page(title):
@@ -125,7 +121,7 @@ def should_edit(change, cache):
         return False
     if not has_sig_with_timestamp(text, ts):
         return False
-    return (title, ts, cache[title])
+    return title, cache[title]
 
 
 def check_stop_or_resume(c):
@@ -156,6 +152,7 @@ def check_stop_or_resume(c):
              "    Timestamp = {}\n"
              "    Comment   = {}".format(user, revid, ts, cmt)))
 
+
 def recent_changes(start, end):
     if STOPPED_BY:
         logger.info('(IndentBot edits paused.) '
@@ -180,8 +177,6 @@ def continuous_page_generator(chunk, delay):
     Check recent changes in intervals of (roughly) chunk minutes.
     Give at least delay minutes of buffer time before editing.
     Chunk should be a small fraction of delay.
-    Note that it's possible for a buffer not to be given if an edit
-    is made between the checkpoint time and the actual save time.
     """
     edits = OrderedDict()
     sec = timedelta(seconds=1)
@@ -190,19 +185,25 @@ def continuous_page_generator(chunk, delay):
     while True:
         current_time = SITE.server_time()
         # get new changes, append to edits dict
-        for title, ts, page in recent_changes(old_time + sec, current_time):
-            edits[title] = (ts, page)
+        for title, page in recent_changes(old_time + sec, current_time):
+            edits[title] = page
             edits.move_to_end(title)
         # yield pages that have waited long enough
-        cutoff_ts = (current_time - delay).isoformat()
-        view = edits.items()
-        oldest = next(iter(view), None)
-        # check if oldest timestamp at least as old as the cutoff timestamp
-        while oldest and oldest[1][0] <= cutoff_ts:
-            # yield the page and delete from edits
-            yield oldest[1][1]
-            del edits[oldest[0]]
-            oldest = next(iter(view), None)
+        cutoff = current_time - delay
+        for title, page in list(edits.items()):
+            if page.editTime() > cutoff:
+                break
+            # force update of text and edit time
+            page.text = page.get(force=True)
+            new_time = page.editTime()
+            # yield if old enough
+            if new_time <= cutoff:
+                yield page
+                del edits[title]
+        # re-sort edits by edit times
+        edits = OrderedDict(
+            sorted(edits.items(), key=lambda z: z[1].editTime())
+        )
         old_time = current_time
         time.sleep(chunk*60)
 
@@ -220,10 +221,9 @@ def fix_page(page):
         page = Page(SITE, page)
     title = page.title()
     title_link = page.title(as_link=True)
-    # fix latest version so that there is no edit conflict
-    tf = TextFixerTWO(page.get(force=True))
-    if any(tf.score):
-        page.text = tf.text
+    fixer = TextFixerTWO(page.text)
+    if any(fixer.score):
+        page.text = fixer.text
         try:
             page.save(summary=EDIT_SUMMARY,
                       minor=title.startswith('User talk:'),
@@ -249,6 +249,7 @@ def fix_page(page):
             logger.exception('Error when saving {}.'.format(title_link))
             raise
 
+
 ################################################################################
 # Main function
 ################################################################################
@@ -270,7 +271,6 @@ def main(chunk, delay, limit=float('inf'), quiet=True):
     t2 = time.perf_counter()
     logger.info(('Ending run. Total edits = {}. '
                  'Time elapsed = {} seconds.').format(count, t2 - t1))
-
 
 if __name__ == "__main__":
     pass

@@ -136,7 +136,7 @@ MAINTAINERS = frozenset(['IndentBot', 'Notsniwiast'])
 
 EDIT_SUMMARY = ('Adjusted indentation to improve accessibility. '
     '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]]. '
-    'See [[User:IndentBot#Useful links]] for guidelines and more info. ')
+    'See [[User:IndentBot#Useful links]] for guidelines and more info.')
 
 # MONTH_NAMES = month_name[1:]
 # MONTH_ABBRS = month_abbr[1:]

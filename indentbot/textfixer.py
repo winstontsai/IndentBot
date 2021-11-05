@@ -187,28 +187,8 @@ def line_partition(text):
     lines.append(text[prev:])
     return lines
 
-
+# For TextFixerTWO
 def line_partition2(text, bad_type):
-    """
-    We want to split on newline characters
-    except those which satisfy at least one of the following:
-    1) Editors may not want the list to break there, and they logically
-        continue the same list after whatever was introduced on that line
-        (usually using colon indentation)
-    2) Mediawiki doesn't treat it as breaking a list.
-
-    So, we break on all newlines EXCEPT
-    1. newlines before tables
-    2. newlines before templates
-    3. newlines before tags
-    4. newlines before File wikilinks
-    -----------------------
-    4. newlines immediately followed by a line consisting of
-        spaces and comments only
-    5. newlines that are part of a segment of whitespace
-        immediately preceding a category link
-    6. ?????
-    """
     wt = wtp.parse(text)
     bad_spans = []
     if bad_type != 'styles':

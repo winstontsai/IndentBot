@@ -16,9 +16,8 @@ from pywikibot import Page, Site, Timestamp, User
 from pywikibot.exceptions import (EditConflictError, LockedPageError,
                                   OtherPageSaveError, PageSaveRelatedError)
 
-from patterns import (BAD_TITLE_PREFIXES, MAINTAINERS, NAMESPACES, SANDBOXES,
-                      SIGNATURE_PATTERN, TEMPLATE_PREFIXES)
-from patterns import starts_with_prefix_in
+import patterns as pat
+
 from textfixer import TextFixer, TextFixerTWO
 
 ################################################################################
@@ -61,7 +60,7 @@ def is_sandbox(title):
     """
     Return True if it's a sandbox.
     """
-    if title in SANDBOXES:
+    if title in pat.SANDBOXES:
         return True
     return bool(re.search(r'/[sS]andbox(?: ?\d+)?(?:/|\Z)', title))
 
@@ -71,7 +70,7 @@ def is_valid_template_page(title):
     Only edit certain template pages.
     An "opt-in" for the template namespace.
     """
-    return starts_with_prefix_in(title, TEMPLATE_PREFIXES)
+    return pat.starts_with_prefix_in(title, pat.TEMPLATE_PREFIXES)
 
 
 def should_not_edit_title(title):
@@ -83,14 +82,14 @@ def should_not_edit_title(title):
         return True
     if title.startswith('Template:') and not is_valid_template_page(title):
         return True
-    if any(title.startswith(x) for x in BAD_TITLE_PREFIXES):
+    if any(title.startswith(x) for x in pat.BAD_TITLE_PREFIXES):
         return True
     return False
 
 
 def has_n_sigs(text, n):
     count = 0
-    for m in re.finditer(SIGNATURE_PATTERN, text):
+    for m in re.finditer(pat.SIGNATURE_PATTERN, text):
         count += 1
         if count >= n:
             return True
@@ -132,8 +131,8 @@ def check_stop_or_resume(c):
     if title != 'User talk:IndentBot':
         return
     grps = set(User(SITE, user).groups())
-    ALLOWED_GRPS = {'extendedconfirmed', 'sysop'}
-    if grps.isdisjoint(ALLOWED_GRPS) and user not in MAINTAINERS:
+    allowed = {'extendedconfirmed', 'sysop'}
+    if grps.isdisjoint(allowed) and user not in pat.MAINTAINERS:
         return
     if cmt.endswith('STOP') and not STOPPED_BY:
         STOPPED_BY = user
@@ -163,7 +162,7 @@ def recent_changes(start, end):
     cache = dict()
     for change in SITE.recentchanges(
             start=start, end=end, reverse=True,
-            changetype='edit', namespaces=NAMESPACES,
+            changetype='edit', namespaces=pat.NAMESPACES,
             minor=False, bot=False, redirect=False):
         # check whether to pause or resume editing based on talk page
         check_stop_or_resume(change)
@@ -225,7 +224,7 @@ def fix_page(page):
     if any(fixer.score):
         page.text = fixer.text
         try:
-            page.save(summary=EDIT_SUMMARY,
+            page.save(summary=pat.EDIT_SUMMARY,
                       minor=title.startswith('User talk:'),
                       nocreate=True,
                       quiet=True)

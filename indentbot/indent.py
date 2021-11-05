@@ -13,8 +13,9 @@ from datetime import timedelta
 import regex as re
 
 from pywikibot import Page, Site, Timestamp, User
-from pywikibot.exceptions import (EditConflictError, LockedPageError,
-                                  OtherPageSaveError, PageSaveRelatedError)
+from pywikibot.exceptions import (AbuseFilterDisallowedError, EditConflictError,
+                                  LockedPageError, OtherPageSaveError,
+                                  PageSaveRelatedError)
 
 import patterns as pat
 
@@ -233,6 +234,9 @@ def fix_page(page):
             logger.warning('Edit conflict for {}.'.format(title_link))
         except LockedPageError:
             logger.warning('{} is locked.'.format(title_link))
+        except AbuseFilterDisallowedError:
+            logger.warning(
+                'Edit to {} prevented by abuse filter.'.format(title_link))
         except OtherPageSaveError as err:
             if err.reason.startswith('Editing restricted by {{bots}}'):
                 logger.warning(

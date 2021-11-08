@@ -13,11 +13,11 @@ def get_args():
         description=('Bot that helps maintain consistent and correct '
             'indentation in discussion pages on Wikipedia.'))
 
-    parser.add_argument('-c', '--chunk', type=int, default=2,
-        help='minimum minutes between recent changes checkpoints (default: 2)')
+    parser.add_argument('-c', '--chunk', type=int, default=5,
+        help='minimum minutes between recent changes checkpoints (default: 5)')
 
-    parser.add_argument('-d', '--delay', type=int, default=10,
-        help='minimum minutes before fixing a page (default: 10)')
+    parser.add_argument('-d', '--delay', type=int, default=30,
+        help='minimum minutes before fixing a page (default: 30)')
 
     parser.add_argument('-l', '--logfile',
         help='log filename (default: $HOME/logs/indentbot.log)')

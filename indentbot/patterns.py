@@ -134,9 +134,8 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 ################################################################################
 MAINTAINERS = frozenset(['IndentBot', 'Notsniwiast'])
 
-EDIT_SUMMARY = ('Adjusted indentation to improve accessibility. '
-    '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]]. '
-    'See [[User:IndentBot#Useful links]] for guidelines and more info.')
+EDIT_SUMMARY = ('Adjusted indentation per [[MOS:ACCESS#Lists]]. '
+    '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]].')
 
 # MONTH_NAMES = month_name[1:]
 # MONTH_ABBRS = month_abbr[1:]
@@ -149,10 +148,11 @@ SIGNATURE_PATTERN = (
     '(' + '|'.join(month_name[1:] + month_abbr[1:]) + ') ' +  # month name
     r'(2\d{3}) \(UTC\)'                                 # yyyy
 )
-# Talk, User talk, Wikipedia talk, File talk, Mediawiki talk,
+# Talk, Wikipedia talk, File talk, Mediawiki talk,
 # Template talk, Help talk, Category talk, Portal talk, Draft talk,
-# TimedText talk, Module talk
-TALK_SPACES = (1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829)
+# TimedText talk, Module talk.
+# NOTE: User talk (3) is currently disabled.
+TALK_SPACES = (1, 5, 7, 11, 13, 15, 101, 119, 711, 829)
 OTHER_SPACES = (4, 10)
 # Wikipedia, Template
 NAMESPACES = TALK_SPACES + OTHER_SPACES
@@ -174,11 +174,15 @@ SANDBOXES = frozenset([
     'User:Sandbox',
 ])
 
-PARSER_EXTENSION_TAGS = frozenset(['categorytree', 'ce', 'charinsert', 'chem',
-    'dynamicpagelist', 'gallery', 'graph', 'hiero', 'imagemap', 'indicator',
-    'inputbox', 'langconvert', 'languages', 'mapframe', 'maplink', 'math',
-    'nowiki', 'poem', 'pre', 'ref', 'references', 'rss', 'score', 'section',
-    'source', 'syntaxhighlight', 'templatedata', 'templatestyles', 'timeline'])
+PARSER_EXTENSION_TAGS = frozenset(['gallery', 'includeonly', 'noinclude',
+    'nowiki', 'onlyinclude', 'pre',
+    'categorytree', 'charinsert', 'chem', 'ce', 'graph', 'hiero', 'imagemap',
+    'indicator', 'inputbox', 'langconvert', 'mapframe', 'maplink', 'math',
+    'math chem',
+    'poem', 'ref', 'references', 'score', 'section', 'syntaxhighlight',
+    'source', 'templatedata', 'templatestyles', 'timeline'
+    ])
+
 
 """Does a newline in this thing break a list? As determined by
 * Hi <tag>
@@ -198,11 +202,13 @@ graph, heiro, imagemap, indicator, inputbox, mapframe, maplink, math,
 math chem, ref, score, syntaxhighlight, source, templatedata, 
 """
 NON_BREAKING_TAGS = frozenset(['gallery', 'includeonly', 'nowiki',
-    'categorytree', 'chem', 'ce', 'graph', 'heiro', 'imagemap', 'indicator',
+    'categorytree', 'chem', 'ce', 'graph', 'hiero', 'imagemap', 'indicator',
     'inputbox', 'mapframe', 'maplink', 'math', 'math chem', 'ref', 'score',
     'syntaxhighlight', 'source', 'templatedata'])
 
 
 if __name__ == "__main__":
-    pass
+    print(PARSER_EXTENSION_TAGS2 - PARSER_EXTENSION_TAGS)
+    print()
+    print(PARSER_EXTENSION_TAGS - PARSER_EXTENSION_TAGS2)
 

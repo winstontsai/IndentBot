@@ -13,9 +13,7 @@ from datetime import timedelta
 import regex as re
 
 from pywikibot import Page, Site, Timestamp, User
-from pywikibot.exceptions import (AbuseFilterDisallowedError, EditConflictError,
-                                  LockedPageError, OtherPageSaveError,
-                                  PageSaveRelatedError)
+from pywikibot.exceptions import *
 
 import patterns as pat
 
@@ -38,20 +36,25 @@ def set_status_page(status):
     page = Page(SITE, 'User:IndentBot/status')
     status = 'active' if status else 'inactive'
     page.text = status
-    page.save(summary='Updating status: {}.'.format(status), quiet=True)
+    page.save(summary='Updating status: {}.'.format(status),
+              quiet=True,
+              minor=True,
+              botflag=True)
 
 
 def is_talk_namespace(namespace_num):
     return namespace_num % 2 == 1
 
 
-def diff_template(page, title=True):
+def diff_template(page, title=None):
     """
     Return a Template:Diff2 string for the given Page.
     """
     x = '{{Diff2|' + str(page.latest_revision_id)
-    if title:
+    if title is None:
         x += '|' + page.title()
+    elif type(title) == str:
+        x += '|' + title
     return x + '}}'
 
 ################################################################################
@@ -194,7 +197,11 @@ def continuous_page_generator(chunk, delay):
             if page.editTime() > cutoff:
                 break
             # force update of text and edit time
-            page.text = page.get(force=True)
+            try:
+                page.text = page.get(force=True)
+            except IsRedirectPageError:
+                del edits[title]
+                continue
             new_time = page.editTime()
             # yield if old enough
             if new_time <= cutoff:
@@ -227,6 +234,7 @@ def fix_page(page):
         try:
             page.save(summary=pat.EDIT_SUMMARY,
                       minor=title.startswith('User talk:'),
+                      botflag=True,
                       nocreate=True,
                       quiet=True)
             return diff_template(page)
@@ -237,6 +245,9 @@ def fix_page(page):
         except AbuseFilterDisallowedError:
             logger.warning(
                 'Edit to {} prevented by abuse filter.'.format(title_link))
+        except SpamblacklistError:
+            logging.warning(
+                'Edit to {} prevented by spam blacklist.'.format(title_link))
         except OtherPageSaveError as err:
             if err.reason.startswith('Editing restricted by {{bots}}'):
                 logger.warning(

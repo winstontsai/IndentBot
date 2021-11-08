@@ -4,7 +4,6 @@ makes available the fixed wikitext, along with an error "score", as attributes.
 """
 import regex as re
 import wikitextparser as wtp
-import mwparserfromhell as mwp
 
 from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
                       SIGNATURE_PATTERN)
@@ -43,7 +42,7 @@ def remove_keys_greater_than(num, d):
     for key in list(d.keys()):
         if key > num:
             del d[key]
-            
+
 
 def bulleted_or_unbulleted(lines, level):
     """
@@ -461,7 +460,14 @@ class TextFixerTWO(TextFixer):
         self._original_text = text
         self._lines = line_partition2(text)
         a, b, c, d = self._fix_gaps(), self._fix_levels(), *self._fix_styles()
-        self._score = (a, b, c, d)
+        score = [a, b, c, d]
+        while a or b or c or d:
+            a, b, c, d = self._fix_gaps(), self._fix_levels(), *self._fix_styles()
+            score[0] += a
+            score[1] += b
+            score[2] += c
+            score[3] += d
+        self._score = tuple(score)
 
     def _fix_levels(self):
         return 0
@@ -473,10 +479,18 @@ class TextFixerTWO(TextFixer):
         for i in range(n):
             m = re.match(r'([:*#]+) *\n?\Z', lines[i])
             if m:
+                # If just trailing, leave it.
+                if i + 1 < n and indent_text(lines[i + 1]) == '':
+                    continue
+                # Or if exactly equal to the preceding and following indents.
                 if i + 1 < n and indent_text(lines[i + 1]) == m[1]:
                     if i - 1 >= 0 and indent_text(lines[i - 1]) == m[1]:
                         continue
-                lines[i] = '\n'
+                # Otherwise remove it.
+                lines[i] = ''
+        lines = [x for x in lines if x]
+        n = len(lines)
+
         i = 0
         while i < n:
             txt_i = indent_text(lines[i])
@@ -593,77 +607,5 @@ class TextFixerTWO(TextFixer):
 
 
 class TextFixerTHREE(TextFixerTWO):
-    def _fix_styles(self):
-        """
-        Fixes mixed indent styles.
-        """
-        lines = self._lines
-        num_lines = len(lines)
-
-        final_indent = [None] * num_lines
-        for i, line in enumerate(lines):
-            itxt = indent_text(line)
-            z = len(itxt)
-            if z == 0:
-                continue
-            # Don't change final indent character at all.
-            final_indent[i] = itxt[-1]
-
-        # At this point, the final indentation character for every line
-        # should have been determined and is stored in final_indent.
-        score, score_final = 0, 0
-        new_lines, prev_lvl, indent_dict = [], 0, {0: ''}
-        for i, line in enumerate(lines):
-            old_indent = indent_text(line)
-            lvl = len(old_indent)
-            if lvl == 0:
-                new_lines.append(line)
-                prev_lvl = 0
-                indent_dict = {0: ''}
-                continue
-            minlvl = min(lvl, prev_lvl)
-            # necessary for edge cases
-            minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
-
-            # Don't change style of lines starting with colons and a table,
-            # but remember the style.
-            if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
-                new_indent = old_indent
-            else:
-                new_prefix = ''
-                p1, p2 = 0, 0
-                while p1 < minlvl and p2 < lvl:
-                    c1 = indent_dict[minlvl][p1]
-                    c2 = line[p2]
-                    if c1 == '#':
-                        if p2 <= lvl - 3 and '::' == line[p2:p2+2]:
-                            new_prefix += '#'
-                            p2 += 1
-                        else:
-                            new_prefix += c2
-                    elif c2 == '#':
-                        new_prefix += c2
-                    else:
-                        new_prefix += c1
-                    p1 += 1
-                    p2 += 1
-                new_indent = new_prefix + line[p2:lvl]
-                # Hide floating bullets
-                if lvl >= prev_lvl + 2:
-                    new_indent = new_indent[:prev_lvl] + new_indent[prev_lvl:].replace('*', ':')
-                # Set the final indent char
-                new_indent = new_indent[:-1] + final_indent[i]
-
-            new_lines.append(new_indent + line[lvl:])
-            new_lvl = len(new_indent)
-            indent_dict[new_lvl] = new_indent
-            # Reset "memory". We intentionally forget higher level indents.
-            if new_lvl < prev_lvl:
-                remove_keys_greater_than(new_lvl, indent_dict)
-            prev_lvl = new_lvl
-            score += new_indent != old_indent
-            score_final += new_indent[-1] != old_indent[-1]
-        self._lines = new_lines
-        return score, score_final
-
+    pass
 

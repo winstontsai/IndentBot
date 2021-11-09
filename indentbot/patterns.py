@@ -208,7 +208,5 @@ NON_BREAKING_TAGS = frozenset(['gallery', 'includeonly', 'nowiki',
 
 
 if __name__ == "__main__":
-    print(PARSER_EXTENSION_TAGS2 - PARSER_EXTENSION_TAGS)
-    print()
-    print(PARSER_EXTENSION_TAGS - PARSER_EXTENSION_TAGS2)
+    pass
 

@@ -469,25 +469,20 @@ class TextFixerTWO(TextFixer):
             score[3] += d
         self._score = tuple(score)
 
-    def _fix_levels(self):
-        return 0
-
     def _fix_gaps(self, squish=True):
         score = 0
         lines = self._lines
         n = len(lines)
+        # Remove lines with indent but no content.
         for i in range(n):
             m = re.match(r'([:*#]+) *\n?\Z', lines[i])
             if m:
-                # If just trailing, leave it.
-                if i + 1 < n and indent_text(lines[i + 1]) == '':
+                # If level doesn't increase after, just leave it.
+                if i + 1 < n and indent_lvl(lines[i + 1]) <= len(m[1]):
                     continue
-                # Or if exactly equal to the preceding and following indents.
-                if i + 1 < n and indent_text(lines[i + 1]) == m[1]:
-                    if i - 1 >= 0 and indent_text(lines[i - 1]) == m[1]:
-                        continue
                 # Otherwise remove it.
                 lines[i] = ''
+                score += 1
         lines = [x for x in lines if x]
         n = len(lines)
 
@@ -530,6 +525,9 @@ class TextFixerTWO(TextFixer):
             i = j
         self._lines = [x for x in lines if x]
         return score
+
+    def _fix_levels(self):
+        return 0
 
     def _fix_styles(self):
         """

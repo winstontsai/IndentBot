@@ -107,7 +107,7 @@ def fix_gaps(text, squish=True):
 ################################################################################
 # STYLE
 ################################################################################
-def fix_styles(text, hide_floating_bullets=True):
+def fix_styles(text):
     lines, score = line_partition(text), 0
     new_lines = []
     prev_lvl, prev_indent = 0, ''
@@ -144,8 +144,64 @@ def fix_styles(text, hide_floating_bullets=True):
                 p2 += 1
             new_indent = new_prefix + line[p2:lvl]
             # Hide floating bullets
-            if hide_floating_bullets and lvl >= prev_lvl + 2:
+            if lvl >= prev_lvl + 2:
                 new_indent = new_indent[:prev_lvl] + new_indent[prev_lvl:].replace('*', ':')
+            # Set the final indent char
+            new_indent = new_indent[:-1] + final_indent_char
+
+        new_lines.append(new_indent + line[lvl:])
+        # Reset "memory". We intentionally forget higher level indents.
+        if has_list_breaking_newline(line):
+            prev_lvl, prev_indent = 0, ''
+        else:
+            prev_lvl, prev_indent = len(new_indent), new_indent
+        score += new_indent != old_indent
+    return ''.join(new_lines), score
+
+
+# THIS VERSION (almost) ALWAYS KEEPS THE RIGHT-MOST '*' INDENT CHARACTER.
+def fix_styles2(text):
+    lines, score = line_partition(text), 0
+    new_lines = []
+    prev_lvl, prev_indent = 0, ''
+    for i, line in enumerate(lines):
+        old_indent, lvl = indent_text_lvl(line)
+        if lvl == 0:
+            new_lines.append(line)
+            prev_lvl, prev_indent = 0, ''
+            continue
+        final_indent_char = old_indent[-1]
+        last_bullet_index = old_indent.rfind('*')
+        minlvl = min(lvl, prev_lvl)
+
+        # Don't change style of lines starting with colons and a table,
+        if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
+            new_indent = old_indent
+        else:
+            new_prefix = ''
+            p1, p2 = 0, 0
+            while p1 < minlvl and p2 < lvl:
+                c1 = prev_indent[p1]
+                c2 = line[p2]
+                if c1 == '#':
+                    if p2 < lvl - 2 and '#' not in line[p2:p2+2]:
+                        new_prefix += '#'
+                        p2 += 1
+                    else:
+                        new_prefix += c2
+                elif c2 == '#':
+                    new_prefix += c2
+                elif p2 == last_bullet_index:
+                    new_prefix += '*'
+                else:
+                    new_prefix += c1
+                p1 += 1
+                p2 += 1
+            new_indent = new_prefix + line[p2:lvl]
+            # Hide floating bullets
+            if lvl >= prev_lvl + 2:
+                x = new_indent[prev_lvl:].replace('*', ':')
+                new_indent = new_indent[:prev_lvl] + x
             # Set the final indent char
             new_indent = new_indent[:-1] + final_indent_char
 

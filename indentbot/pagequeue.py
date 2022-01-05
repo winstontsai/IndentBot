@@ -116,6 +116,7 @@ def recent_changes(start, end):
         logger.info('Checking edits from {} to {}.'.format(start, end))
     # page cache for this checkpoint
     cache = dict()
+    changes = []
     for change in SITE.recentchanges(
             start=start, end=end, reverse=True,
             changetype='edit', namespaces=pat.NAMESPACES,
@@ -124,7 +125,8 @@ def recent_changes(start, end):
         check_stop_or_resume(change)
         result = should_edit(change, cache)
         if result:
-            yield result
+            changes.append(result)
+    return changes
 
 
 ################################################################################

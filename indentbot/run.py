@@ -103,7 +103,8 @@ def fix_page(page, fixer):
 
 
 def main(chunk, delay, limit, verbose):
-    logger.info('Starting run.')
+    logger.info(('Starting run. '
+        '(chunk={}, delay={}, limit={})').format(chunk, delay, limit))
     t1 = time.perf_counter()
     count = 0
     for p in pagequeue.continuous_page_generator(chunk=chunk, delay=delay):
@@ -115,18 +116,20 @@ def main(chunk, delay, limit, verbose):
             if verbose:
                 print(diff)
         if count >= limit:
-            logger.info('Limit reached.')
+            logger.info('Limit ({}) reached.'.format(limit))
             break
     t2 = time.perf_counter()
-    logger.info(('Ending run. Total edits = {}. '
-                 'Time elapsed = {} seconds.').format(count, t2 - t1))
+    logger.info(('Ending run. Total edits={}. '
+                 'Time elapsed={} seconds.').format(count, t2 - t1))
 
 
 def run():
     args = get_args()
     set_up_logging(logfile=args.logfile)
-    main(chunk=args.chunk, delay=args.delay,
-        limit=args.total, verbose=args.verbose)
+    main(chunk=args.chunk,
+         delay=args.delay,
+         limit=args.total,
+         verbose=args.verbose)
 
 
 def set_status_page(status):
@@ -141,8 +144,8 @@ def set_status_page(status):
 
 if __name__ == '__main__':
     logger = logging.getLogger('indentbot_logger')
+    set_status_page(True)
     try:
-        set_status_page(True)
         run()
     except BaseException as e:
         logger.error('Ending run due to {}.'.format(type(e).__name__))

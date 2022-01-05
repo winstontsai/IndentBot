@@ -1,15 +1,16 @@
 import argparse
 import logging
 import sys
+import time
 
 from pathlib import Path
 
 from pywikibot import Page
+from pywikibot.exceptions import *
 
 import pagequeue
-
+import patterns as pat
 from fixes import fix_gaps, fix_styles
-from patterns import diff_template
 from textfixer import TF
 
 ################################################################################
@@ -69,12 +70,12 @@ def fix_page(page, fixer):
     if fixer:
         page.text = fixer.text
         try:
-            page.save(summary=pat.EDIT_SUMMARY,
-                      minor=True,
+            page.save(summary=pat.EDIT_SUMMARY + ' {}'.format(fixer.score),
+                      minor=False,
                       botflag=True,
                       nocreate=True,
                       quiet=True)
-            return diff_template(page)
+            return pat.diff_template(page)
         except EditConflictError:
             logger.warning('Edit conflict for {}.'.format(title_link))
         except LockedPageError:
@@ -106,7 +107,7 @@ def main(chunk, delay, limit, verbose):
     t1 = time.perf_counter()
     count = 0
     for p in pagequeue.continuous_page_generator(chunk=chunk, delay=delay):
-        if STOPPED_BY:
+        if pagequeue.STOPPED_BY:
             continue
         diff = fix_page(p, TF(fix_gaps, fix_styles))
         if diff:
@@ -123,10 +124,9 @@ def main(chunk, delay, limit, verbose):
 
 def run():
     args = get_args()
-    print(args)
     set_up_logging(logfile=args.logfile)
-    # main(chunk=args.chunk, delay=args.delay,
-    #     limit=args.total, verbose=args.verbose)
+    main(chunk=args.chunk, delay=args.delay,
+        limit=args.total, verbose=args.verbose)
 
 
 def set_status_page(status):
@@ -145,7 +145,8 @@ if __name__ == '__main__':
         set_status_page(True)
         run()
     except BaseException as e:
-        set_status_page(False)
         logger.error('Ending run due to {}.'.format(type(e).__name__))
         raise
+    finally:
+        set_status_page(False)
 

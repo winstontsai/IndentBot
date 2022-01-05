@@ -5,7 +5,6 @@ This module is for tracking recent changes and applying the fixes.
 import heapq
 import itertools
 import logging
-import sys
 import time
 
 from calendar import month_name
@@ -13,8 +12,7 @@ from datetime import timedelta
 
 import regex as re
 
-from pywikibot import Page, Site, Timestamp, User
-from pywikibot.exceptions import *
+from pywikibot import Page, Site, User
 
 import patterns as pat
 
@@ -96,7 +94,7 @@ def continuous_page_generator(chunk, delay):
     pq = PageQueue()
     sec = timedelta(seconds=1)
     delay = timedelta(minutes=delay)
-    old_time = SITE.server_time() - delay
+    old_time = SITE.server_time() - delay * 2
     while True:
         current_time = SITE.server_time()
         # get new changes
@@ -213,7 +211,7 @@ def check_stop_or_resume(c):
     if title != 'User talk:IndentBot':
         return
     grps = set(User(SITE, user).groups())
-    if cmt.endswith('STOP') and not STOPPED_BY:
+    if cmt.endswith('STOP') and STOPPED_BY is None:
         if grps.isdisjoint({'autoconfirmed', 'sysop'}) and user not in pat.MAINTAINERS:
             return
         STOPPED_BY = user
@@ -224,7 +222,7 @@ def check_stop_or_resume(c):
              "    Timestamp = {}\n"
              "    Comment   = {}".format(user, revid, ts, cmt)))
 
-    elif cmt.endswith('RESUME') and STOPPED_BY:
+    elif cmt.endswith('RESUME') and STOPPED_BY is not None:
         if 'sysop' not in grps and user not in pat.MAINTAINERS:
             return
         STOPPED_BY = None

@@ -8,8 +8,7 @@ import logging
 import sys
 import time
 
-from calendar import month_name, month_abbr
-from collections import OrderedDict
+from calendar import month_name
 from datetime import timedelta
 
 import regex as re
@@ -18,9 +17,6 @@ from pywikibot import Page, Site, Timestamp, User
 from pywikibot.exceptions import *
 
 import patterns as pat
-
-from textfixer import TF
-from fixes import *
 
 ################################################################################
 
@@ -39,7 +35,7 @@ class PageQueue:
         self._pq = []
         self._entry_finder = {}
         self._REMOVED = '<removed-task>'
-        self._counter = itertools.count()
+        self._counter = itertools.count(start=1)
         self._len = 0
 
     def remove_page(self, title):
@@ -97,46 +93,6 @@ def continuous_page_generator(chunk, delay):
     Give at least delay minutes of buffer time before editing.
     Chunk should be a small fraction of delay.
     """
-    edits = OrderedDict()
-    sec = timedelta(seconds=1)
-    delay = timedelta(minutes=delay)
-    old_time = SITE.server_time() - delay
-    while True:
-        current_time = SITE.server_time()
-        # get new changes, append to edits dict
-        for title, page in recent_changes(old_time + sec, current_time):
-            edits[title] = page
-            edits.move_to_end(title)
-        # yield pages that have waited long enough
-        cutoff = current_time - delay
-        for title, page in list(edits.items()):
-            if page.editTime() > cutoff:
-                break
-            # force update of text and edit time
-            try:
-                page.text = page.get(force=True)
-            except IsRedirectPageError:
-                del edits[title]
-                continue
-            new_time = page.editTime()
-            # yield if old enough
-            if new_time <= cutoff:
-                yield page
-                del edits[title]
-        # re-sort edits by edit times
-        edits = OrderedDict(
-            sorted(edits.items(), key=lambda z: z[1].editTime())
-        )
-        old_time = current_time
-        time.sleep(chunk*60)
-
-
-def continuous_page_generator2(chunk, delay):
-    """
-    Check recent changes in intervals of (roughly) chunk minutes.
-    Give at least delay minutes of buffer time before editing.
-    Chunk should be a small fraction of delay.
-    """
     pq = PageQueue()
     sec = timedelta(seconds=1)
     delay = timedelta(minutes=delay)
@@ -146,13 +102,31 @@ def continuous_page_generator2(chunk, delay):
         # get new changes
         for title, page in recent_changes(old_time + sec, current_time):
             pq.add_page(page)
-        print(pq._pq)
         # yield pages that have waited long enough
         cutoff = current_time - delay
         while pq and pq.view_min()[0] <= cutoff:
             yield pq.pop_page()
         old_time = current_time
         time.sleep(chunk*60)
+
+
+def recent_changes(start, end):
+    if STOPPED_BY:
+        logger.info('(IndentBot edits paused.) '
+            'Checking edits from {} to {}.'.format(start, end))
+    else:
+        logger.info('Checking edits from {} to {}.'.format(start, end))
+    # page cache for this checkpoint
+    cache = dict()
+    for change in SITE.recentchanges(
+            start=start, end=end, reverse=True,
+            changetype='edit', namespaces=pat.NAMESPACES,
+            minor=False, bot=False, redirect=False):
+        # check whether to pause or resume editing based on talk page
+        check_stop_or_resume(change)
+        result = should_edit(change, cache)
+        if result:
+            yield result
 
 
 ################################################################################
@@ -214,7 +188,9 @@ def has_sig_with_timestamp(text, ts):
 
 
 def should_edit(change, cache):
-    if change['newlen'] - change['oldlen'] < 42:
+    # Number of bytes should generally increase when someone is adding
+    # a signed comment.
+    if change['newlen'] - change['oldlen'] < 40:
         return False
     title, ts = change['title'], change['timestamp']
     if title_filter(title):
@@ -237,10 +213,8 @@ def check_stop_or_resume(c):
     if title != 'User talk:IndentBot':
         return
     grps = set(User(SITE, user).groups())
-    allowed = {'extendedconfirmed', 'sysop'}
-
     if cmt.endswith('STOP') and not STOPPED_BY:
-        if grps.isdisjoint(allowed) and user not in pat.MAINTAINERS:
+        if grps.isdisjoint({'autoconfirmed', 'sysop'}) and user not in pat.MAINTAINERS:
             return
         STOPPED_BY = user
         set_status_page(False)
@@ -251,7 +225,7 @@ def check_stop_or_resume(c):
              "    Comment   = {}".format(user, revid, ts, cmt)))
 
     elif cmt.endswith('RESUME') and STOPPED_BY:
-        if grps.isdisjoint({'sysop'}) and user not in pat.MAINTAINERS:
+        if 'sysop' not in grps and user not in pat.MAINTAINERS:
             return
         STOPPED_BY = None
         set_status_page(True)
@@ -260,25 +234,6 @@ def check_stop_or_resume(c):
              "    Revid     = {}\n"
              "    Timestamp = {}\n"
              "    Comment   = {}".format(user, revid, ts, cmt)))
-
-
-def recent_changes(start, end):
-    if STOPPED_BY:
-        logger.info('(IndentBot edits paused.) '
-            'Checking edits from {} to {}.'.format(start, end))
-    else:
-        logger.info('Checking edits from {} to {}.'.format(start, end))
-    # page cache for this checkpoint
-    cache = dict()
-    for change in SITE.recentchanges(
-            start=start, end=end, reverse=True,
-            changetype='edit', namespaces=pat.NAMESPACES,
-            minor=False, bot=False, redirect=False):
-        # check whether to pause or resume editing based on talk page
-        check_stop_or_resume(change)
-        result = should_edit(change, cache)
-        if result:
-            yield result
 
 
 if __name__ == "__main__":

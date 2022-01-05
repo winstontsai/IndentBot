@@ -8,8 +8,6 @@ from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
                       SIGNATURE_PATTERN)
 from patterns import in_span
 
-__all__ = ['fix_gaps', 'fix_styles', 'fix_styles2']
-
 ################################################################################
 # GAPS
 ################################################################################

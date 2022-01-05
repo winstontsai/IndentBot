@@ -4,9 +4,13 @@ import sys
 
 from pathlib import Path
 
+from pywikibot import Page
+
 import pagequeue
 
+from fixes import fix_gaps, fix_styles
 from patterns import diff_template
+from textfixer import TF
 
 ################################################################################
 
@@ -15,11 +19,11 @@ def get_args():
         description=('Bot that helps maintain consistent and correct '
             'indentation in discussion pages on Wikipedia.'))
 
-    parser.add_argument('-c', '--chunk', type=int, default=5,
-        help='minimum minutes between recent changes checkpoints (default: 5)')
+    parser.add_argument('-c', '--chunk', type=int,
+        help='minimum minutes between recent changes checkpoints')
 
-    parser.add_argument('-d', '--delay', type=int, default=30,
-        help='minimum minutes before fixing a page (default: 30)')
+    parser.add_argument('-d', '--delay', type=int,
+        help='minimum minutes before fixing a page')
 
     parser.add_argument('-l', '--logfile',
         help='log filename (default: $HOME/logs/indentbot.log)')
@@ -60,15 +64,13 @@ def fix_page(page, fixer):
     If save is successful, returns a string for Template:Diff2.
     Returns None (or raises an exception) otherwise.
     """
-    if isinstance(page, str):
-        page = Page(SITE, page)
     title, title_link = page.title(), page.title(as_link=True)
     fixer.fix(page.text)
     if fixer:
         page.text = fixer.text
         try:
             page.save(summary=pat.EDIT_SUMMARY,
-                      minor=title.startswith('User talk:'),
+                      minor=True,
                       botflag=True,
                       nocreate=True,
                       quiet=True)
@@ -121,13 +123,14 @@ def main(chunk, delay, limit, verbose):
 
 def run():
     args = get_args()
+    print(args)
     set_up_logging(logfile=args.logfile)
-    main(chunk=args.chunk, delay=args.delay,
-        limit=args.total, verbose=args.verbose)
+    # main(chunk=args.chunk, delay=args.delay,
+    #     limit=args.total, verbose=args.verbose)
 
 
 def set_status_page(status):
-    page = Page(SITE, 'User:IndentBot/status')
+    page = Page(pagequeue.SITE, 'User:IndentBot/status')
     status = 'active' if status else 'inactive'
     page.text = status
     page.save(summary='Updating status: {}.'.format(status),

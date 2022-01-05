@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pagequeue
 
+from patterns import diff_template
+
 ################################################################################
 
 def get_args():
@@ -104,11 +106,11 @@ def main(chunk, delay, limit, verbose):
     for p in pagequeue.continuous_page_generator(chunk=chunk, delay=delay):
         if STOPPED_BY:
             continue
-        diff_template = fix_page(p, TF(fix_gaps, fix_styles2, text=p.text))
-        if diff_template:
+        diff = fix_page(p, TF(fix_gaps, fix_styles))
+        if diff:
             count += 1
             if verbose:
-                print(diff_template)
+                print(diff)
         if count >= limit:
             logger.info('Limit reached.')
             break
@@ -124,13 +126,23 @@ def run():
         limit=args.total, verbose=args.verbose)
 
 
+def set_status_page(status):
+    page = Page(SITE, 'User:IndentBot/status')
+    status = 'active' if status else 'inactive'
+    page.text = status
+    page.save(summary='Updating status: {}.'.format(status),
+              minor=True,
+              botflag=True,
+              quiet=True,)
+
+
 if __name__ == '__main__':
     logger = logging.getLogger('indentbot_logger')
     try:
-        pagequeue.set_status_page(True)
+        set_status_page(True)
         run()
     except BaseException as e:
-        pagequeue.set_status_page(False)
+        set_status_page(False)
         logger.error('Ending run due to {}.'.format(type(e).__name__))
         raise
 

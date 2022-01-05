@@ -14,7 +14,7 @@ __all__ = ['fix_gaps', 'fix_styles', 'fix_styles2']
 # GAPS
 ################################################################################
 def fix_gaps(text, squish=True):
-    lines, score = line_partition2(text), 0
+    lines, score = line_partition(text), 0
     n = len(lines)
     # Remove certain lines with indent, but no content.
     for i in range(1, n):
@@ -73,7 +73,7 @@ def fix_gaps(text, squish=True):
 #     Remove over-indentation. Over-indents with more than maximum
 #     extra indents are not altered.
 #     """
-#     lines, score = line_partition2(text), 0
+#     lines, score = line_partition(text), 0
 #     lines.insert(0, '\n') # for handling first line edge case
 #     n = len(lines)
 #     for i in range(n - 1):
@@ -109,23 +109,18 @@ def fix_gaps(text, squish=True):
 ################################################################################
 # STYLE
 ################################################################################
-def fix_styles(text):
-    """
-    Fixes mixed indent styles.
-    """
-    lines, score = line_partition2(text), 0
-    new_lines, prev_lvl, indent_dict = [], 0, {0: ''}
+def fix_styles(text, hide_floating_bullets=True):
+    lines, score = line_partition(text), 0
+    new_lines = []
+    prev_lvl, prev_indent = 0, ''
     for i, line in enumerate(lines):
         old_indent, lvl = indent_text_lvl(line)
         if lvl == 0:
             new_lines.append(line)
-            prev_lvl = 0
-            indent_dict = {0: ''}
+            prev_lvl, prev_indent = 0, ''
             continue
         final_indent_char = old_indent[-1]
         minlvl = min(lvl, prev_lvl)
-        # necessary for edge cases
-        minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
 
         # Don't change style of lines starting with colons and a table,
         # but remember the style.
@@ -135,7 +130,7 @@ def fix_styles(text):
             new_prefix = ''
             p1, p2 = 0, 0
             while p1 < minlvl and p2 < lvl:
-                c1 = indent_dict[minlvl][p1]
+                c1 = prev_indent[p1]
                 c2 = line[p2]
                 if c1 == '#':
                     if p2 < lvl - 2 and '#' not in line[p2:p2+2]:
@@ -151,81 +146,20 @@ def fix_styles(text):
                 p2 += 1
             new_indent = new_prefix + line[p2:lvl]
             # Hide floating bullets
-            if lvl >= prev_lvl + 2:
+            if hide_floating_bullets and lvl >= prev_lvl + 2:
                 new_indent = new_indent[:prev_lvl] + new_indent[prev_lvl:].replace('*', ':')
             # Set the final indent char
             new_indent = new_indent[:-1] + final_indent_char
 
         new_lines.append(new_indent + line[lvl:])
-        new_lvl = len(new_indent)
-        indent_dict[new_lvl] = new_indent
         # Reset "memory". We intentionally forget higher level indents.
         if has_list_breaking_newline(line):
-            indent_dict = {0: ''}
-        elif new_lvl < prev_lvl:
-            remove_keys_greater_than(new_lvl, indent_dict)
-        prev_lvl = new_lvl
-        score += new_indent != old_indent
-    return ''.join(new_lines), score
-
-def fix_styles2(text):
-    """
-    Fixes mixed indent styles.
-    """
-    lines, score = line_partition2(text), 0
-    new_lines, prev_lvl, indent_dict = [], 0, {0: ''}
-    for i, line in enumerate(lines):
-        old_indent, lvl = indent_text_lvl(line)
-        if lvl == 0:
-            new_lines.append(line)
-            prev_lvl = 0
-            indent_dict = {0: ''}
-            continue
-        final_indent_char = old_indent[-1]
-        minlvl = min(lvl, prev_lvl)
-        # necessary for edge cases
-        minlvl = next(k for k in range(minlvl, -1, -1) if k in indent_dict)
-
-        # Don't change style of lines starting with colons and a table,
-        # but remember the style.
-        if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
-            new_indent = old_indent
+            prev_lvl, prev_indent = 0, ''
         else:
-            new_prefix = ''
-            p1, p2 = 0, 0
-            while p1 < minlvl and p2 < lvl:
-                c1 = indent_dict[minlvl][p1]
-                c2 = line[p2]
-                if c1 == '#':
-                    if p2 < lvl - 2 and '#' not in line[p2:p2+2]:
-                        new_prefix += '#'
-                        p2 += 1
-                    else:
-                        new_prefix += c2
-                elif c2 == '#':
-                    new_prefix += c2
-                else:
-                    new_prefix += c1
-                p1 += 1
-                p2 += 1
-            new_indent = new_prefix + line[p2:lvl]
-            # Hide floating bullets
-            if lvl >= prev_lvl + 2:
-                new_indent = new_indent[:prev_lvl] + new_indent[prev_lvl:].replace('*', ':')
-            # Set the final indent char
-            new_indent = new_indent[:-1] + final_indent_char
-
-        new_lines.append(new_indent + line[lvl:])
-        new_lvl = len(new_indent)
-        indent_dict[new_lvl] = new_indent
-        # Reset "memory". We intentionally forget higher level indents.
-        if has_list_breaking_newline(line):
-            indent_dict = {0: ''}
-        elif new_lvl < prev_lvl:
-            remove_keys_greater_than(new_lvl, indent_dict)
-        prev_lvl = new_lvl
+            prev_lvl, prev_indent = len(new_indent), new_indent
         score += new_indent != old_indent
     return ''.join(new_lines), score
+
 
 ################################################################################
 # Line partitioning functions.
@@ -233,83 +167,26 @@ def fix_styles2(text):
 ################################################################################
 def line_partition(text):
     """
-    We want to split on newline characters
-    except those which satisfy at least one of the following:
-    1) Editors may not want the list to break there, and they logically
-        continue the same list after whatever was introduced on that line
-        (usually using colon indentation)
-    2) Mediawiki doesn't treat it as breaking a list.
-
-    So, we break on all newlines EXCEPT
-    1. newlines before tables
-    2. newlines before templates
-    3. newlines before tags
-    4. newlines before File wikilinks
-    -----------------------
-    4. newlines immediately followed by a line consisting of
-        spaces and comments only
-    5. newlines that are part of a segment of whitespace
-        immediately preceding a category link
-    6. ?????
-    """
-    wt = wtp.parse(text)
-    bad_spans = []
-    for x in wt.tables + wt.templates + wt.get_tags():
-        i, j = x.span
-        m = re.search(r'\n( |{})*\Z'.format(COMMENT_RE), text[:i])
-        if m:
-            i = m.start()
-        if '\n' in text[i:j]:
-            bad_spans.append((i, j))
-
-    for x in wt.comments:
-        if '\n' in str(x):
-            bad_spans.append(x.span)
-
-    # newline followed by line consisting of spaces and comments ONLY
-    for m in re.finditer(
-            r'\n *{}( |{})*(?=\n)'.format(COMMENT_RE, COMMENT_RE),
-            text, flags=re.S):
-        bad_spans.append(m.span())
-
-    # whitespace followed by a Category link doesn't break lines
-    for m in re.finditer(
-            r'(\s|{})+\[\[Category:'.format(COMMENT_RE),
-            text, flags=re.I):
-        if '\n' in m[0]:
-            bad_spans.append(m.span())
-
-    # newlines preceding links to files
-    for m in re.finditer(
-            r'\n( |{})*\[\[(?:File|Image):'.format(COMMENT_RE),
-            text, flags=re.S):
-        bad_spans.append(m.span())
-
-    # Now partition into lines.
-    prev, lines = 0, []
-    for i, c in enumerate(text):
-        if c != '\n':
-            continue
-        if not any(in_span(i, s) for s in bad_spans):
-            lines.append(text[prev:i + 1])
-            prev = i + 1
-    # Wikipedia strips newlines from the end, so add final line.
-    # If text does have newline at the end, this is harmless since it
-    # just adds an empty string.
-    lines.append(text[prev:])
-    return lines
-
-
-def line_partition2(text):
-    """
     This version better conforms to how Wikipedia treats line breaks with
     respect to lists.
     """
     wt = wtp.parse(text)
     bad_indices = set()
-    for x in (wt.tables + wt.templates 
-              + wt.comments + wt.wikilinks + wt.parser_functions):
+    for x in wt.tables + wt.templates + wt.comments:
         i, j = x.span
+        bad_indices.update(find_all(text, '\n', i, j))
+
+    for x in wt.wikilinks:
+        if x.text is None:
+            continue
+        i, j = x.span
+        bad_indices.update(find_all(text, '\n', text.index('|', i), j))
+
+    for x in wt.parser_functions:
+        i, j = x.span
+        k = text.find(':', i)
+        if k != -1:
+            i = k
         bad_indices.update(find_all(text, '\n', i, j))
 
     for x in wt.get_tags():
@@ -384,11 +261,6 @@ def has_list_breaking_newline(line):
         if '\n' in x.contents:
             return True
     return False
-
-def remove_keys_greater_than(num, d):
-    for key in list(d.keys()):
-        if key > num:
-            del d[key]
 
 def find_all(s, sub, start=0, end=None):
     """

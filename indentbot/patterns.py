@@ -124,6 +124,18 @@ def construct_template(name, d):
     return '{{' + name + positional + named + '}}'
 
 
+def diff_template(page, title=None):
+    """
+    Return a Template:Diff2 string for the given Page.
+    """
+    x = '{{Diff2|' + str(page.latest_revision_id)
+    if title is None:
+        x += '|' + page.title()
+    else:
+        x += '|' + title
+    return x + '}}'
+
+
 ################################################################################
 # Regular expressions
 ################################################################################

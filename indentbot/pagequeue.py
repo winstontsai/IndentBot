@@ -58,35 +58,37 @@ class PageQueue:
         self._len += 1
 
     def pop_page(self):
-        while self._pq:
-            priority, count, page = heapq.heappop(self._pq)
-            if page is not self._REMOVED:
-                del self._entry_finder[page.title()]
-                self._len -= 1
-                return page
+        self._clear_removed_from_front()
+        if self._pq:
+            page = heapq.heappop(self._pq)[2]
+            del self._entry_finder[page.title()]
+            self._len -= 1
+            return page
         raise KeyError('pop from an empty PageQueue')
 
     def view_min(self):
         # Clear out removed items left at the front of the queue.
         # Also, update priority so that the true min is returned.
         while self._pq:
+            self._clear_removed_from_front()
             priority, count, page = self._pq[0]
-            if page is self._REMOVED:
-                heapq.heappop(self._pq)
+            try:
+                page.text = page.get(force=True)
+            except IsRedirectPageError:
+                self.pop_page()
+                continue
+            if page.editTime() > priority:
+                self.add_page(page)
             else:
-                try:
-                    page.text = page.get(force=True)
-                except IsRedirectPageError:
-                    self.pop_page()
-                    continue
-                if page.editTime() > priority:
-                    self.add_page(page)
-                else:
-                    return priority, page
+                return priority, page
         raise KeyError('empty PageQueue has no min')
 
     def __len__(self):
         return self._len
+
+    def _clear_removed_from_front(self):
+        while self._pq and self._pq[0][2] is self._REMOVED:
+            heapq.heappop(self._pq)
 
 
 def continuous_page_generator(chunk, delay):
@@ -156,30 +158,8 @@ def continuous_page_generator2(chunk, delay):
 ################################################################################
 # Helper functions
 ################################################################################
-def set_status_page(status):
-    page = Page(SITE, 'User:IndentBot/status')
-    status = 'active' if status else 'inactive'
-    page.text = status
-    page.save(summary='Updating status: {}.'.format(status),
-              quiet=True,
-              minor=True,
-              botflag=True)
-
-
 def is_talk_namespace(namespace_num):
     return namespace_num % 2 == 1
-
-
-def diff_template(page, title=None):
-    """
-    Return a Template:Diff2 string for the given Page.
-    """
-    x = '{{Diff2|' + str(page.latest_revision_id)
-    if title is None:
-        x += '|' + page.title()
-    elif type(title) == str:
-        x += '|' + title
-    return x + '}}'
 
 
 def is_sandbox(title):

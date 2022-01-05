@@ -151,7 +151,7 @@ SIGNATURE_PATTERN = (
 # Talk, Wikipedia talk, File talk, Mediawiki talk,
 # Template talk, Help talk, Category talk, Portal talk, Draft talk,
 # TimedText talk, Module talk.
-# NOTE: User talk (3) is currently disabled.
+# NOTE: User talk (3) is currently not included.
 TALK_SPACES = (1, 5, 7, 11, 13, 15, 101, 119, 711, 829)
 OTHER_SPACES = (4, 10)
 # Wikipedia, Template

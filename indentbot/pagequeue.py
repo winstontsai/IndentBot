@@ -14,6 +14,7 @@ from datetime import timedelta
 import regex as re
 
 from pywikibot import Page, Site, User
+from pywikibot.exceptions import *
 
 import patterns as pat
 
@@ -92,13 +93,13 @@ def continuous_page_generator(chunk, delay):
     pq = PageQueue()
     sec = timedelta(seconds=1)
     delay = timedelta(minutes=delay)
-    old_time = SITE.server_time() - delay * 2
+    old_time = SITE.server_time() - delay - timedelta(minutes=chunk)
     chunk *= 60    # convert to seconds
     while True:
         tstart = time.perf_counter()
         current_time = SITE.server_time()
         # get new changes
-        for title, page in recent_changes(old_time + sec, current_time):
+        for page in recent_changes(old_time + sec, current_time):
             pq.add_page(page)
         # yield pages that have waited long enough
         yield from pq.pop_up_to(current_time - delay)
@@ -136,7 +137,7 @@ def is_talk_namespace(namespace_num):
 
 def is_sandbox(title):
     """
-    Return True if it's a sandbox.
+    Return True if the title looks like it belongs to a sandbox.
     """
     if title in pat.SANDBOXES:
         return True
@@ -153,8 +154,7 @@ def is_valid_template_page(title):
 
 def title_filter(title):
     """
-    Returns True if a page should not be edited based on its title.
-    An "opt-out" based on titles.
+    Returns True iff a page should NOT be edited based on its title.
     """
     if is_sandbox(title):
         return True
@@ -166,6 +166,9 @@ def title_filter(title):
 
 
 def has_n_sigs(text, n):
+    """
+    Returns True iff we find at least n user signatures in the text.
+    """
     count = 0
     for m in re.finditer(pat.SIGNATURE_PATTERN, text):
         count += 1
@@ -175,6 +178,10 @@ def has_n_sigs(text, n):
 
 
 def has_sig_with_timestamp(text, ts):
+    """
+    Returns an re.Match object corresponding to a user signature with the
+    timestamp given by ts. Returns None if a match is not found.
+    """
     recent_sig_pat = (
         r'\[\[[Uu]ser(?: talk)?:[^\n]+?'             # user link
         + r'{}:{}, '.format(ts[11:13], ts[14:16])    # hh:mm
@@ -186,6 +193,10 @@ def has_sig_with_timestamp(text, ts):
 
 
 def should_edit(change, cache):
+    """
+    Return False if we should not edit based on the change.
+    Otherwise, return the appropriate Page object.
+    """
     # Number of bytes should generally increase when someone is adding
     # a signed comment.
     if change['newlen'] - change['oldlen'] < 40:
@@ -196,22 +207,27 @@ def should_edit(change, cache):
     if title not in cache:
         cache[title] = Page(SITE, title)
     text = cache[title].text
-    if not is_talk_namespace(change['ns']) and not has_n_sigs(text, 3):
+    if not is_talk_namespace(change['ns']) and not has_n_sigs(text, 5):
         return False
     if not has_sig_with_timestamp(text, ts):
         return False
-    return title, cache[title]
+    return cache[title]
 
 
 def check_stop_or_resume(c):
-    # Stop or resume the bot based on a talk page edit.
+    """
+    Stop or resume the bot based on a talk page edit.
+    Currently, the policy is that any autoconfirmed user or admin can stop
+    the bot, while only admins can resume it.
+
+    """
     global STOPPED_BY
     title, user, cmt = c['title'], c['user'], c.get('comment', '')
     revid, ts = c['revid'], c['timestamp']
     if title != 'User talk:IndentBot':
         return
     maintainer = user in pat.MAINTAINERS
-    grps = set(User(SITE, user).groups())
+    grps = frozenset(User(SITE, user).groups())
     if cmt.endswith('STOP') and STOPPED_BY is None:
         if grps.isdisjoint({'autoconfirmed', 'sysop'}) and not maintainer:
             return

@@ -117,40 +117,35 @@ def fix_styles(text):
             new_lines.append(line)
             prev_lvl, prev_indent = 0, ''
             continue
-        final_indent_char = old_indent[-1]
         minlvl = min(lvl, prev_lvl)
-
         # Don't change style of lines starting with colons and a table,
         # but remember the style.
         if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
             new_indent = old_indent
         else:
-            new_prefix = ''
+            new_indent = ''
             p1, p2 = 0, 0
             while p1 < minlvl and p2 < lvl:
                 c1 = prev_indent[p1]
                 c2 = line[p2]
                 if c1 == '#':
                     if p2 < lvl - 2 and '#' not in line[p2:p2+2]:
-                        new_prefix += '#'
+                        new_indent += '#'
                         p2 += 1
                     else:
-                        new_prefix += c2
+                        new_indent += c2
                 elif c2 == '#':
-                    new_prefix += c2
+                    new_indent += c2
                 else:
-                    new_prefix += c1
+                    new_indent += c1
                 p1 += 1
                 p2 += 1
-            new_indent = new_prefix + line[p2:lvl]
-            # Hide floating bullets
-            if lvl >= prev_lvl + 2:
-                new_indent = new_indent[:prev_lvl] + new_indent[prev_lvl:].replace('*', ':')
-            # Set the final indent char
-            new_indent = new_indent[:-1] + final_indent_char
-
+            for c in line[p2:lvl]:
+                # Hides any leftover floating bullets
+                new_indent += ':' if c == '*' else c
+        # Always keep original final indent character.
+        new_indent = new_indent[:-1] + old_indent[-1]
         new_lines.append(new_indent + line[lvl:])
-        # Reset "memory". We intentionally forget higher level indents.
         if has_list_breaking_newline(line):
             prev_lvl, prev_indent = 0, ''
         else:
@@ -173,7 +168,6 @@ def fix_styles2(text):
         final_indent_char = old_indent[-1]
         last_bullet_index = old_indent.rfind('*')
         minlvl = min(lvl, prev_lvl)
-
         # Don't change style of lines starting with colons and a table,
         if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
             new_indent = old_indent
@@ -198,11 +192,14 @@ def fix_styles2(text):
                 p1 += 1
                 p2 += 1
             new_indent = new_prefix + line[p2:lvl]
-            # Hide floating bullets
+            # Hide floating bullets due to abnormal level increase.
             if lvl >= prev_lvl + 2:
-                x = new_indent[prev_lvl:].replace('*', ':')
-                new_indent = new_indent[:prev_lvl] + x
-            # Set the final indent char
+                last_bullet_index = new_indent.rfind('*')
+                if last_bullet_index >= prev_lvl:
+                    new_indent = (new_indent[:prev_lvl]
+                                  + new_indent[prev_lvl:last_bullet_index].replace('*', ':')
+                                  + new_indent[last_bullet_index:])
+            # Set the final indent char to be the same as original.
             new_indent = new_indent[:-1] + final_indent_char
 
         new_lines.append(new_indent + line[lvl:])
@@ -302,8 +299,9 @@ def visual_lvl(line):
 def has_list_breaking_newline(line):
     """
     Return True if line contains a "real" line break besides at the end.
-    Considers newlines immediately preceding tables, templates, tags,
-    and File wikilinks to be real line breaks.
+    Basically, during line partitioning we may ignore some newlines that
+    actually do break lists so that we don't edit stuff that shouldn't be
+    edited, e.g. <pre></pre>. This function lets us detect such line breaks.
     """
     # pat = '\n( |' + COMMENT_RE + r')*(\{[{|]|<[^!]|\[\[(?:File|Image):)'
     # return bool(re.search(pat, line))

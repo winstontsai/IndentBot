@@ -52,37 +52,34 @@ class PageQueue:
         self._len += 1
 
     def pop_page(self):
-        self._clear_removed_from_front()
-        if self._pq:
-            page = heapq.heappop(self._pq)[2]
-            del self._entry_finder[page.title()]
-            self._len -= 1
-            return page
+        while self._pq:
+            prio, count, page = heapq.heappop(self._pq)
+            if page is not self._REMOVED:
+                del self._entry_finder[page.title()]
+                self._len -= 1
+                return page
         raise KeyError('pop from an empty PageQueue')
 
-    def view_min(self):
-        # Clear out removed items left at the front of the queue.
-        # Also, update priority so that the true min is returned.
+    def pop_up_to(self, priority):
         while self._pq:
-            self._clear_removed_from_front()
-            priority, count, page = self._pq[0]
-            try:
-                page.text = page.get(force=True)
-            except IsRedirectPageError:
-                self.pop_page()
-                continue
-            if page.editTime() > priority:
-                self.add_page(page)
+            if self._pq[0][2] is self._REMOVED:
+                heapq.heappop(self._pq)
             else:
-                return priority, page
-        raise KeyError('empty PageQueue has no min')
+                prio, page = self._pq[0][0], self._pq[0][2]
+                if prio > priority:
+                    return
+                try:
+                    page.text = page.get(force=True)
+                except IsRedirectPageError:
+                    self.pop_page()
+                else:
+                    if page.editTime() > priority:
+                        self.add_page(page)
+                    else:
+                        yield self.pop_page()
 
     def __len__(self):
         return self._len
-
-    def _clear_removed_from_front(self):
-        while self._pq and self._pq[0][2] is self._REMOVED:
-            heapq.heappop(self._pq)
 
 
 def continuous_page_generator(chunk, delay):
@@ -101,9 +98,7 @@ def continuous_page_generator(chunk, delay):
         for title, page in recent_changes(old_time + sec, current_time):
             pq.add_page(page)
         # yield pages that have waited long enough
-        cutoff = current_time - delay
-        while pq and pq.view_min()[0] <= cutoff:
-            yield pq.pop_page()
+        yield from pq.pop_up_to(current_time - delay)
         old_time = current_time
         time.sleep(chunk*60)
 
@@ -212,9 +207,10 @@ def check_stop_or_resume(c):
     revid, ts = c['revid'], c['timestamp']
     if title != 'User talk:IndentBot':
         return
+    maintainer = user in pat.MAINTAINERS
     grps = set(User(SITE, user).groups())
     if cmt.endswith('STOP') and STOPPED_BY is None:
-        if grps.isdisjoint({'autoconfirmed', 'sysop'}) and user not in pat.MAINTAINERS:
+        if grps.isdisjoint({'autoconfirmed', 'sysop'}) and not maintainer:
             return
         STOPPED_BY = user
         set_status_page(False)
@@ -225,7 +221,7 @@ def check_stop_or_resume(c):
              "    Comment   = {}".format(user, revid, ts, cmt)))
 
     elif cmt.endswith('RESUME') and STOPPED_BY is not None:
-        if 'sysop' not in grps and user not in pat.MAINTAINERS:
+        if 'sysop' not in grps and not maintainer:
             return
         STOPPED_BY = None
         set_status_page(True)

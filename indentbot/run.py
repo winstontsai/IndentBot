@@ -69,8 +69,14 @@ def fix_page(page, fixer):
     fixer.fix(page.text)
     if fixer:
         page.text = fixer.text
+        score = fixer.score
+        summary = ('Adjusting indentation markup'
+            + ' per [[MOS:LISTGAP]], [[MOS:INDENTGAP]], and [[MOS:INDENTMIX]].'
+            + ' {} blank lines removed.'.format(score[1])
+            + ' {} indent markup adjustments.'.format(score[0])
+            + ' [[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]].')
         try:
-            page.save(summary=pat.EDIT_SUMMARY + ' {}'.format(fixer.score),
+            page.save(summary=summary,
                       minor=False,
                       botflag=True,
                       nocreate=True,

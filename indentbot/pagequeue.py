@@ -93,18 +93,17 @@ def continuous_page_generator(chunk, delay):
     pq = PageQueue()
     sec = timedelta(seconds=1)
     delay = timedelta(minutes=delay)
-    old_time = SITE.server_time() - delay - timedelta(minutes=chunk)
-    chunk *= 60    # convert to seconds
+    old_cutoff = SITE.server_time() - delay - timedelta(minutes=chunk)
     while True:
         tstart = time.perf_counter()
-        current_time = SITE.server_time()
+        cutoff = SITE.server_time() - delay
         # get new changes
-        for page in recent_changes(old_time + sec, current_time):
+        for page in recent_changes(old_cutoff + sec, cutoff):
             pq.add_page(page)
         # yield pages that have waited long enough
-        yield from pq.pop_up_to(current_time - delay)
-        old_time = current_time
-        time.sleep(max(0, chunk - time.perf_counter() + tstart))
+        yield from pq.pop_up_to(cutoff)
+        old_cutoff = cutoff
+        time.sleep(max(0, 60*chunk - time.perf_counter() + tstart))
 
 
 def recent_changes(start, end):
@@ -199,7 +198,7 @@ def should_edit(change, cache):
     """
     # Number of bytes should generally increase when someone is adding
     # a signed comment.
-    if change['newlen'] - change['oldlen'] < 40:
+    if change['newlen'] - change['oldlen'] < 100:
         return False
     title, ts = change['title'], change['timestamp']
     if title_filter(title):

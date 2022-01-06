@@ -146,9 +146,6 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 ################################################################################
 MAINTAINERS = frozenset(['IndentBot', 'Notsniwiast'])
 
-EDIT_SUMMARY = ('Adjusted indentation per [[MOS:ACCESS#Lists]]. '
-    '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]].')
-
 # MONTH_NAMES = month_name[1:]
 # MONTH_ABBRS = month_abbr[1:]
 # MONTH_TO_INT = {month: i + 1 for i, month in enumerate(MONTH_NAMES)}

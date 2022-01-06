@@ -6,7 +6,7 @@ makes available the fixed wikitext, along with an error "score", as attributes.
 class TF:
     def __init__(self, *fixes, text=None):
         """
-        Fixes should be callables taking one parameter, the text to be fix,
+        fixes should be callables taking one parameter, the text to be fix,
         and returning a 2-tuple consisting of fixed text and a numeric score.
         It is up to the callable what the score represents, but ideally it
         reoresents the "amount" of fixing that's been done by the callable.
@@ -67,8 +67,8 @@ class TF:
     @property
     def original_text(self):
         """
-        Returns the text supplied to the last call to fix, or None if there has
-        not been such a call.
+        Returns the text supplied to the last call to fix, or None
+        if there has not been such a call.
         """
         return self._original_text
 

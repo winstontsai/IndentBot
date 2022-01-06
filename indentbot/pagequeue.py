@@ -1,6 +1,7 @@
 """
-Fix indentation in discussion pages on Wikipedia.
-This module is for tracking recent changes and applying the fixes.
+This module is for tracking recent changes and generating Page objects
+to be edited.
+It uses an edit-time-based priority queue.
 """
 import heapq
 import itertools
@@ -35,6 +36,9 @@ class PageQueue:
         self._REMOVED = '<removed-task>'
         self._counter = itertools.count(start=1)
         self._len = 0
+
+    def __len__(self):
+        return self._len
 
     def remove_page(self, title):
         entry = self._entry_finder.pop(title)
@@ -78,9 +82,6 @@ class PageQueue:
                     else:
                         yield self.pop_page()
 
-    def __len__(self):
-        return self._len
-
 
 def continuous_page_generator(chunk, delay):
     """
@@ -93,6 +94,7 @@ def continuous_page_generator(chunk, delay):
     delay = timedelta(minutes=delay)
     old_time = SITE.server_time() - delay * 2
     while True:
+        tstart = time.perf_counter()
         current_time = SITE.server_time()
         # get new changes
         for title, page in recent_changes(old_time + sec, current_time):
@@ -100,7 +102,7 @@ def continuous_page_generator(chunk, delay):
         # yield pages that have waited long enough
         yield from pq.pop_up_to(current_time - delay)
         old_time = current_time
-        time.sleep(chunk*60)
+        time.sleep(max(0, chunk * 60 - time.perf_counter() + tstart))
 
 
 def recent_changes(start, end):

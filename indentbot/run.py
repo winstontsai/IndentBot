@@ -110,7 +110,7 @@ def main(chunk, delay, limit, verbose):
     for p in pagequeue.continuous_page_generator(chunk=chunk, delay=delay):
         if pagequeue.STOPPED_BY:
             continue
-        diff = fix_page(p, TF(fix_gaps, fix_styles))
+        diff = fix_page(p, TF(fix_styles, fix_gaps))
         if diff:
             count += 1
             if verbose:

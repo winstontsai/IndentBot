@@ -66,15 +66,15 @@ class PageQueue:
 
     def pop_up_to(self, priority):
         while self._pq:
-            if self._pq[0][2] is self._REMOVED:
+            prio, page = self._pq[0][0], self._pq[0][2]
+            if prio > priority:
+                break
+            if page is self._REMOVED:
                 heapq.heappop(self._pq)
             else:
-                prio, page = self._pq[0][0], self._pq[0][2]
-                if prio > priority:
-                    return
                 try:
                     page.text = page.get(force=True)
-                except IsRedirectPageError:
+                except (IsRedirectPageError, NoPageError):
                     self.pop_page()
                 else:
                     if page.editTime() > priority:
@@ -85,7 +85,7 @@ class PageQueue:
 
 def continuous_page_generator(chunk, delay):
     """
-    Check recent changes in intervals of (roughly) chunk minutes.
+    Check recent changes in intervals of chunk minutes.
     Give at least delay minutes of buffer time before editing.
     Chunk should be a small fraction of delay.
     """
@@ -93,6 +93,7 @@ def continuous_page_generator(chunk, delay):
     sec = timedelta(seconds=1)
     delay = timedelta(minutes=delay)
     old_time = SITE.server_time() - delay * 2
+    chunk *= 60    # convert to seconds
     while True:
         tstart = time.perf_counter()
         current_time = SITE.server_time()
@@ -102,7 +103,7 @@ def continuous_page_generator(chunk, delay):
         # yield pages that have waited long enough
         yield from pq.pop_up_to(current_time - delay)
         old_time = current_time
-        time.sleep(max(0, chunk * 60 - time.perf_counter() + tstart))
+        time.sleep(max(0, chunk - time.perf_counter() + tstart))
 
 
 def recent_changes(start, end):

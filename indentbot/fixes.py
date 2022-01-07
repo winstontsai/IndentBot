@@ -6,7 +6,6 @@ import wikitextparser as wtp
 
 from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
                       SIGNATURE_PATTERN)
-from patterns import in_span
 
 ################################################################################
 # GAPS

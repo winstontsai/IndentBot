@@ -1,10 +1,11 @@
 """
-This module defines some reusable regexes/patterns, and some helper functions.
-Also stores constants.
+This module defines some utilities and constants.
 """
 from calendar import month_name, month_abbr
 
 import regex as re
+
+from pagequeue import SITE
 
 ################################################################################
 def pattern_count(pattern, text, flags=0):
@@ -45,94 +46,25 @@ def rindex_pattern(pattern, text, start=0, end=None, flags=0):
     return i
 
 
-def is_subspan(x, y):
-    """
-    Return True if x is a subspan of y.
-    """
-    return y[0]<=x[0] and x[1]<=y[1]
+def set_status_page(status):
+    page = Page(SITE, 'User:IndentBot/status')
+    status = 'active' if status else 'inactive'
+    page.text = status
+    page.save(summary='Updating status: {}.'.format(status),
+              minor=True,
+              botflag=True,
+              quiet=True,)
 
 
-def in_span(i, span):
-    return span[0] <= i < span[1]
-
-
-def starts_with_prefix_in(text, prefixes):
-    return any(text.startswith(x) for x in prefixes)
-
-
-################################################################################
-# Helper functions for making regular expressions
-################################################################################
-def alternates(l):
-    return '(?:' + "|".join(l) + ')'
-
-
-def template_pattern(name, disambiguator = ''):
-    """
-    Returns regex matching the specified template.
-    Assumes no nested templates.
-    """
-    disambiguator = str(disambiguator) # used to prevent duplicate group names
-    z = ''.join(x for x in name if x.isalpha())[:20]
-    z += str(len(name)) + disambiguator
-    t = r'(?P<template_' + z + r'>{{(?:[^}{]|(?&template_' + z + r'))*}})'
-    return r'{{\s*' + name + r'\s*(?:\|(?:[^}}{{]|{t})*)?' + '}}'
-
-
-def construct_redirects(l):
-    """
-    Constructs the part of a regular expression which
-    allows different options corresponding to the redirects listed in l.
-    For example, if we want to match both
-    "Rotten Tomatoes" and "RottenTomatoes",
-    use this function with l = ["Rotten Tomatoes", "RottenTomatoes"]
-    """
-    r = [r"[{}]{}".format(x[0].upper() + x[0].lower(), x[1:]) for x in l]
-    return alternates(r)
-
-
-################################################################################
-# Helper functions for templates
-################################################################################
-def parse_template(template):
-    """
-    Takes the text of a template and
-    returns the template's name and a dict of the key-value pairs.
-    Unnamed parameters are given the integer keys 1, 2, 3, etc, in order.
-    """
-    d, counter = dict(), 1
-    pieces = [x.strip() for x in template.strip('{}').split('|')]
-    for piece in pieces[1:]:
-        param, equals, value = piece.partition('=')
-        if equals:
-            d[param.rstrip()] = value.lstrip()
-        else:
-            d[str(counter)] = param
-            counter += 1
-    return (pieces[0], d)
-
-
-def construct_template(name, d):
-    positional = ''
-    named = ''
-    for k, v in sorted(d.items()):
-        if re.fullmatch(r"[1-9][0-9]*", k):
-            positional += "|{}".format(v)
-    for k, v in d.items():
-        if not re.fullmatch(r"[1-9][0-9]*", k):
-            named += "|{}={}".format(k, v)
-    return '{{' + name + positional + named + '}}'
-
-
-def diff_template(page, title=None):
+def diff_template(page, label=None):
     """
     Return a Template:Diff2 string for the given Page.
     """
     x = '{{Diff2|' + str(page.latest_revision_id)
-    if title is None:
+    if label is None:
         x += '|' + page.title()
     else:
-        x += '|' + title
+        x += '|' + label
     return x + '}}'
 
 
@@ -146,10 +78,6 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 ################################################################################
 MAINTAINERS = frozenset(['IndentBot', 'Notsniwiast'])
 
-# MONTH_NAMES = month_name[1:]
-# MONTH_ABBRS = month_abbr[1:]
-# MONTH_TO_INT = {month: i + 1 for i, month in enumerate(MONTH_NAMES)}
-# MONTH_TO_INT.update({month: i + 1 for i, month in enumerate(MONTH_ABBRS)})
 SIGNATURE_PATTERN = (
     r'\[\[[Uu]ser(?: talk)?:[^\n]+?' +                  # user page link
     r'([0-2]\d):([0-5]\d), ' +                          # hh:mm
@@ -157,6 +85,7 @@ SIGNATURE_PATTERN = (
     '(' + '|'.join(month_name[1:] + month_abbr[1:]) + ') ' +  # month name
     r'(2\d{3}) \(UTC\)'                                 # yyyy
 )
+
 # Talk, Wikipedia talk, File talk, Mediawiki talk,
 # Template talk, Help talk, Category talk, Portal talk, Draft talk,
 # TimedText talk, Module talk.

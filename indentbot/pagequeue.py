@@ -27,6 +27,8 @@ SITE.login(user='IndentBot')
 # Certain users are allowed to stop and resume the bot.
 # When stopped, the bot continues tracking edits, but does not edit any pages.
 STOPPED_BY = None
+def is_stopped():
+    return bool(STOPPED_BY)
 
 ################################################################################
 
@@ -91,25 +93,27 @@ def continuous_page_generator(chunk, delay):
     Chunk should be a small fraction of delay.
     """
     pq = PageQueue()
-    sec = timedelta(seconds=1)
-    delay = timedelta(minutes=delay)
-    old_cutoff = SITE.server_time() - delay - timedelta(minutes=chunk)
+    sec, delay = timedelta(seconds=1), timedelta(minutes=delay)
+    old_time = SITE.server_time() - timedelta(minutes=chunk)
+    old_cutoff = old_time - delay
     while True:
         tstart = time.perf_counter()
-        cutoff = SITE.server_time() - delay
+        current_time = SITE.server_time()
+        cutoff = current_time - delay
+        check_stop_or_resume(old_time + sec)
         # get new changes
         for page in recent_changes(old_cutoff + sec, cutoff):
             pq.add_page(page)
         # yield pages that have waited long enough
         yield from pq.pop_up_to(cutoff)
-        old_cutoff = cutoff
+        old_time, old_cutoff = current_time, cutoff
         time.sleep(max(0, 60*chunk - time.perf_counter() + tstart))
 
 
 def recent_changes(start, end):
     if STOPPED_BY:
-        logger.info('(IndentBot edits paused.) '
-            'Checking edits from {} to {}.'.format(start, end))
+        logger.info('(Edits paused by {}.) '.format(STOPPED_BY)
+            + 'Checking edits from {} to {}.'.format(start, end))
     else:
         logger.info('Checking edits from {} to {}.'.format(start, end))
     # page cache for this checkpoint
@@ -119,8 +123,6 @@ def recent_changes(start, end):
             start=start, end=end, reverse=True,
             changetype='edit', namespaces=pat.NAMESPACES,
             minor=False, bot=False, redirect=False):
-        # check whether to pause or resume editing based on talk page
-        check_stop_or_resume(change)
         result = should_edit(change, cache)
         if result:
             changes.append(result)
@@ -148,7 +150,7 @@ def is_valid_template_page(title):
     Only edit certain template pages.
     An "opt-in" for the template namespace.
     """
-    return pat.starts_with_prefix_in(title, pat.TEMPLATE_PREFIXES)
+    return any(title.startswith(x) for x in pat.TEMPLATE_PREFIXES)
 
 
 def title_filter(title):
@@ -213,41 +215,41 @@ def should_edit(change, cache):
     return cache[title]
 
 
-def check_stop_or_resume(c):
+def check_stop_or_resume(starttime):
     """
-    Stop or resume the bot based on a talk page edit.
+    Stop or resume the bot based on a talk page edits.
     Currently, the policy is that any autoconfirmed user or admin can stop
     the bot, while only admins can resume it.
-
     """
     global STOPPED_BY
-    title, user, cmt = c['title'], c['user'], c.get('comment', '')
-    revid, ts = c['revid'], c['timestamp']
-    if title != 'User talk:IndentBot':
-        return
-    maintainer = user in pat.MAINTAINERS
-    grps = frozenset(User(SITE, user).groups())
-    if cmt.endswith('STOP') and STOPPED_BY is None:
-        if grps.isdisjoint({'autoconfirmed', 'sysop'}) and not maintainer:
-            return
-        STOPPED_BY = user
-        set_status_page(False)
-        logger.warning(
-            ("STOPPED by {}.\n"
-             "    Revid     = {}\n"
-             "    Timestamp = {}\n"
-             "    Comment   = {}".format(user, revid, ts, cmt)))
-
-    elif cmt.endswith('RESUME') and STOPPED_BY is not None:
-        if 'sysop' not in grps and not maintainer:
-            return
-        STOPPED_BY = None
-        set_status_page(True)
-        logger.warning(
-            ("RESUMED by {}.\n"
-             "    Revid     = {}\n"
-             "    Timestamp = {}\n"
-             "    Comment   = {}".format(user, revid, ts, cmt)))
+    page = Page(SITE, 'User talk:IndentBot')
+    for rev in page.revisions(starttime=starttime, reverse=True):
+        cmt, user = rev.get('comment', ''), rev['user']
+        revid, ts = rev.revid, rev.timestamp.isoformat()
+        is_maintainer = user in pat.MAINTAINERS
+        groups = User(site, user).groups()
+        if is_maintainer or 'sysop' in groups:
+            can_stop, can_resume = True, True
+        elif 'autoconfirmed' in groups:
+            can_stop, can_resume = True, False
+        else:
+            continue
+        if cmt.endswith('STOP') and STOPPED_BY is None and can_stop:
+            STOPPED_BY = user
+            pat.set_status_page(False)
+            logger.warning(
+                ("STOPPED by {}.\n"
+                 "    Revid     = {}\n"
+                 "    Timestamp = {}\n"
+                 "    Comment   = {}".format(user, revid, ts, cmt)))
+        elif cmt.endswith('RESUME') and STOPPED_BY is not None and can_resume:
+            STOPPED_BY = None
+            pat.set_status_page(True)
+            logger.warning(
+                ("RESUMED by {}.\n"
+                 "    Revid     = {}\n"
+                 "    Timestamp = {}\n"
+                 "    Comment   = {}".format(user, revid, ts, cmt)))
 
 
 if __name__ == "__main__":

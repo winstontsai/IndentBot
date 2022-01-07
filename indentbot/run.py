@@ -114,7 +114,7 @@ def main(chunk, delay, limit, verbose):
     t1 = time.perf_counter()
     count = 0
     for p in pagequeue.continuous_page_generator(chunk=chunk, delay=delay):
-        if pagequeue.STOPPED_BY:
+        if pagequeue.is_stopped():
             continue
         fixer = TF(fix_styles, fix_gaps)
         diff = fix_page(p, fixer)
@@ -139,24 +139,14 @@ def run():
          verbose=args.verbose)
 
 
-def set_status_page(status):
-    page = Page(pagequeue.SITE, 'User:IndentBot/status')
-    status = 'active' if status else 'inactive'
-    page.text = status
-    page.save(summary='Updating status: {}.'.format(status),
-              minor=True,
-              botflag=True,
-              quiet=True,)
-
-
 if __name__ == '__main__':
     logger = logging.getLogger('indentbot_logger')
-    set_status_page(True)
+    pat.set_status_page(True)
     try:
         run()
     except BaseException as e:
         logger.error('Ending run due to {}.'.format(type(e).__name__))
         raise
     finally:
-        set_status_page(False)
+        pat.set_status_page(False)
 

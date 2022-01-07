@@ -71,7 +71,7 @@ def fix_page(page, fixer):
     if any(score):
         page.text = newtext
         summary = ('Adjusting indentation/list markup'
-            + ' per [[MOS:INDENTMIX]], [[MOS:INDENTGAP]], and [[MOS:LISTGAP]].'
+            + ' per [[WP:INDENTMIX]], [[WP:INDENTGAP]], and [[WP:LISTGAP]].'
             + ' {} markup adjustments,'.format(score[0])
             + ' {} blank lines removed.'.format(score[1])
             + ' [[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]].')

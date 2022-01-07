@@ -70,9 +70,9 @@ def fix_page(page, fixer):
     newtext, score = fixer.fix(page.text)
     if any(score):
         page.text = newtext
-        summary = ('Adjusting indentation markup'
+        summary = ('Adjusting indentation/list markup'
             + ' per [[MOS:INDENTMIX]], [[MOS:INDENTGAP]], and [[MOS:LISTGAP]].'
-            + ' {} indent markup adjustments.'.format(score[0])
+            + ' {} markup adjustments,'.format(score[0])
             + ' {} blank lines removed.'.format(score[1])
             + ' [[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]].')
         try:
@@ -81,7 +81,6 @@ def fix_page(page, fixer):
                       botflag=True,
                       nocreate=True,
                       quiet=True)
-            return pat.diff_template(page)
         except EditConflictError:
             logger.warning('Edit conflict for {}.'.format(title_link))
         except LockedPageError:
@@ -106,7 +105,8 @@ def fix_page(page, fixer):
         except Exception:
             logger.exception('Error when saving {}.'.format(title_link))
             raise
-
+        else:
+            return pat.diff_template(page)
 
 def main(chunk, delay, limit, verbose):
     logger.info(('Starting run. '

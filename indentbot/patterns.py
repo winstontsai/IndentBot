@@ -47,15 +47,6 @@ def rindex_pattern(pattern, text, start=0, end=None, flags=0):
     return i
 
 
-def set_status_page(status):
-    page = pwb.Page(SITE, 'User:IndentBot/status')
-    page.text = status
-    page.save(summary='Updating status: {}.'.format(status),
-              minor=True,
-              botflag=True,
-              quiet=True,)
-
-
 def diff_template(page, label=None):
     """
     Return a Template:Diff2 string for the given Page.
@@ -66,6 +57,15 @@ def diff_template(page, label=None):
     else:
         x += '|' + label
     return x + '}}'
+
+
+def set_status_page(status):
+    page = pwb.Page(SITE, 'User:IndentBot/status')
+    page.text = status
+    page.save(summary='Updating status: {}'.format(status),
+              minor=True,
+              botflag=True,
+              quiet=True,)
 
 
 ################################################################################

@@ -26,9 +26,7 @@ SITE.login(user='IndentBot')
 
 # Certain users are allowed to stop and resume the bot.
 # When stopped, the bot continues tracking edits, but does not edit any pages.
-STOPPED_BY = None
-def is_stopped():
-    return STOPPED_BY is not None
+PAUSED = False
 
 ################################################################################
 
@@ -101,7 +99,7 @@ def continuous_page_generator(chunk, delay):
         current_time = SITE.server_time()
         cutoff = current_time - delay
         check_stop_or_resume(old_time + sec)
-        if not is_stopped():
+        if not PAUSED:
             # get new changes
             for page in recent_changes(old_cutoff + sec, cutoff):
                 pq.add_page(page)
@@ -112,23 +110,19 @@ def continuous_page_generator(chunk, delay):
 
 
 def recent_changes(start, end):
-    if is_stopped():
-        logger.info('(Edits paused by {}.) '.format(STOPPED_BY)
-            + 'Checking edits from {} to {}.'.format(start, end))
-    else:
-        logger.info('Checking edits from {} to {}.'.format(start, end))
+    """
+    Yield recent changes between the timestamps start and end, inclusive.
+    """
+    logger.info('Checking edits from {} to {}.'.format(start, end))
     # page cache for this checkpoint
     cache = dict()
-    changes = []
     for change in SITE.recentchanges(
             start=start, end=end, reverse=True,
             changetype='edit', namespaces=pat.NAMESPACES,
             minor=False, bot=False, redirect=False):
         result = should_edit(change, cache)
         if result:
-            changes.append(result)
-    return changes
-
+            yield result
 
 ################################################################################
 # Helper functions
@@ -199,8 +193,6 @@ def should_edit(change, cache):
     Return False if we should not edit based on the change.
     Otherwise, return the appropriate Page object.
     """
-    # Number of bytes should generally increase when someone is adding
-    # a signed comment.
     if change['newlen'] - change['oldlen'] < 100:
         return False
     title, ts = change['title'], change['timestamp']
@@ -222,7 +214,7 @@ def check_stop_or_resume(starttime):
     Currently, the policy is that any autoconfirmed user or admin can stop
     the bot, while only admins can resume it.
     """
-    global STOPPED_BY
+    global PAUSED
     page = Page(SITE, 'User talk:IndentBot')
     for rev in page.revisions(starttime=starttime, reverse=True):
         cmt, user = rev.get('comment', ''), rev['user']
@@ -235,19 +227,19 @@ def check_stop_or_resume(starttime):
             can_stop, can_resume = True, False
         else:
             continue
-        if cmt.endswith('STOP') and not is_stopped() and can_stop:
-            STOPPED_BY = user
-            pat.set_status_page(False)
+        if cmt.endswith('PAUSE') and not PAUSED and can_stop:
+            PAUSED = True
+            pat.set_status_page('paused')
             logger.warning(
-                ("STOPPED by {}.\n"
+                ("Paused by {}.\n"
                  "    Revid     = {}\n"
                  "    Timestamp = {}\n"
                  "    Comment   = {}".format(user, revid, ts, cmt)))
-        elif cmt.endswith('RESUME') and is_stopped() and can_resume:
-            STOPPED_BY = None
-            pat.set_status_page(True)
+        elif cmt.endswith('RESUME') and PAUSED and can_resume:
+            PAUSED = False
+            pat.set_status_page('active')
             logger.warning(
-                ("RESUMED by {}.\n"
+                ("Resumed by {}.\n"
                  "    Revid     = {}\n"
                  "    Timestamp = {}\n"
                  "    Comment   = {}".format(user, revid, ts, cmt)))

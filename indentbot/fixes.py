@@ -106,58 +106,88 @@ def fix_gaps(text, squish=True):
 ################################################################################
 # STYLE
 ################################################################################
-def fix_styles(text, hide_extra_bullets=True):
-    lines, score = line_partition(text), 0
-    new_lines = []
-    prev_lvl, prev_indent = 0, ''
-    for i, line in enumerate(lines):
-        old_indent, lvl = indent_text_lvl(line)
-        if lvl == 0:
-            new_lines.append(line)
-            prev_lvl, prev_indent = 0, ''
-            continue
-        last_bullet_index = old_indent.rfind('*')
-        minlvl = min(lvl, prev_lvl)
-        # Don't change style of lines starting with colons and a table,
-        # but remember the style.
-        if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
-            new_indent = old_indent
-        else:
-            new_indent = ''
-            p1, p2 = 0, 0
-            while p1 < minlvl and p2 < lvl:
-                c1 = prev_indent[p1]
-                c2 = line[p2]
-                if c1 == '#':
-                    if p2 < lvl - 2 and '#' not in line[p2:p2+2]:
-                        new_indent += '#'
-                        p2 += 1
-                    else:
-                        new_indent += c2
-                elif c2 == '#':
-                    new_indent += c2
-                else:
-                    new_indent += c1
-                p1 += 1
-                p2 += 1
-            if hide_extra_bullets:
-                for j in range(p2, lvl):
-                    new_indent += ':' if line[j] == '*' else line[j]
+class StyleFix:
+    def __init__(self, hide_extra_bullets=0):
+        """
+        The parameter hide_extra_bullets determines how "floating"
+        bullets that occur inside an abnormal level increase are treated.
+        Example:
+
+        * Comment 1.
+        ***: Comment 2.
+
+        Consider the second and third bullets of Comment 2.
+        If hide_extra_bullets == 0, then they are left alone.
+        If hide_extra_bullets == 1, then only the rightmost bullet is kept,
+            so only the second bullet is hidden.
+        If hide_extra_bullets == 2, then both the second and third bullets
+            are hidden.
+
+        If the final indent character for Comment 2 was '*', then 1 and 2
+        will have the same behavior and both the second and third bullets
+        of Comment 2 would be removed. This is because the rightmost bullet
+        would be the final indent character, which is always preserved.
+        """
+        self.hide_extra_bullets = hide_extra_bullets
+
+    def __call__(self, text):
+        lines, score = line_partition(text), 0
+        new_lines = []
+        prev_lvl, prev_indent = 0, ''
+        for i, line in enumerate(lines):
+            old_indent, lvl = indent_text_lvl(line)
+            if lvl == 0:
+                new_lines.append(line)
+                prev_lvl, prev_indent = 0, ''
+                continue
+            minlvl = min(lvl, prev_lvl)
+            # Don't change style of lines starting with colons and a table,
+            # but remember the style.
+            if re.match(r':*( |' + COMMENT_RE + r')*\{\|', line):
+                new_indent = old_indent
             else:
-                new_indent += line[p2:lvl]
-        # Always keep original final indent character.
-        new_indent = new_indent[:-1] + old_indent[-1]
-        new_lines.append(new_indent + line[lvl:])
-        if has_list_breaking_newline(line):
-            prev_lvl, prev_indent = 0, ''
-        else:
-            prev_lvl, prev_indent = len(new_indent), new_indent
-        score += new_indent != old_indent
-    return ''.join(new_lines), score
+                new_indent = ''
+                p1, p2 = 0, 0
+                while p1 < minlvl and p2 < lvl:
+                    c1 = prev_indent[p1]
+                    c2 = line[p2]
+                    if c1 == '#':
+                        if p2 < lvl - 2 and '#' not in line[p2:p2+2]:
+                            new_indent += '#'
+                            p2 += 1
+                        else:
+                            new_indent += c2
+                    elif c2 == '#':
+                        new_indent += c2
+                    else:
+                        new_indent += c1
+                    p1 += 1
+                    p2 += 1
+                if self.hide_extra_bullets == 2:
+                    for j in range(p2, lvl):
+                        new_indent += ':' if line[j] == '*' else line[j]
+                elif self.hide_extra_bullets == 1:
+                    last_bullet_index = old_indent.rfind('*')
+                    for j in range(p2, lvl):
+                        if j == last_bullet_index:
+                            new_indent += '*'
+                        else:
+                            new_indent += ':' if line[j] == '*' else line[j]
+                else:
+                    new_indent += line[p2:lvl]
+            # Always keep original final indent character.
+            new_indent = new_indent[:-1] + old_indent[-1]
+            new_lines.append(new_indent + line[lvl:])
+            if has_list_breaking_newline(line):
+                prev_lvl, prev_indent = 0, ''
+            else:
+                prev_lvl, prev_indent = len(new_indent), new_indent
+            score += new_indent != old_indent
+        return ''.join(new_lines), score
 
 
 # THIS VERSION (almost) ALWAYS KEEPS THE RIGHT-MOST '*' CHARACTER.
-def fix_styles2(text):
+def fix_styles3(text):
     lines, score = line_partition(text), 0
     new_lines = []
     prev_lvl, prev_indent = 0, ''
@@ -324,7 +354,4 @@ def find_all(s, sub, start=0, end=None):
             return
         yield start
         start += len(sub)
-
-
-
 

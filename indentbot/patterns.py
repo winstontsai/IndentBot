@@ -49,7 +49,6 @@ def rindex_pattern(pattern, text, start=0, end=None, flags=0):
 
 def set_status_page(status):
     page = pwb.Page(SITE, 'User:IndentBot/status')
-    status = 'active' if status else 'inactive'
     page.text = status
     page.save(summary='Updating status: {}.'.format(status),
               minor=True,

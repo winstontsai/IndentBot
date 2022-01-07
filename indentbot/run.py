@@ -11,7 +11,7 @@ from pywikibot.exceptions import *
 import pagequeue
 import patterns as pat
 
-from fixes import fix_gaps, fix_styles
+from fixes import *
 from textfixer import TF
 
 ################################################################################
@@ -112,7 +112,7 @@ def main(chunk, delay, limit, verbose):
     logger.info(('Starting run. '
         '(chunk={}, delay={}, limit={})').format(chunk, delay, limit))
     t1 = time.perf_counter()
-    FIXER = TF(fix_styles, fix_gaps)
+    FIXER = TF(StyleFix(1), fix_gaps)
     count = 0
     for p in pagequeue.continuous_page_generator(chunk, delay):
         diff = fix_page(p, FIXER)
@@ -139,12 +139,12 @@ def run():
 
 if __name__ == '__main__':
     logger = logging.getLogger('indentbot_logger')
-    pat.set_status_page(True)
+    pat.set_status_page('active')
     try:
         run()
     except BaseException as e:
         logger.error('Ending run due to {}.'.format(type(e).__name__))
         raise
     finally:
-        pat.set_status_page(False)
+        pat.set_status_page('inactive')
 

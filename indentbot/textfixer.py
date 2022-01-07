@@ -13,6 +13,10 @@ class TF:
         Optionally, the text parameter can be provided to immediately fix
         some text upon object initialization.
         """
+        if not fixes:
+            raise ValueError('no fixes provided')
+        if any(not callable(f) for f in fixes):
+            raise TypeError('all fixes must be callable')
         self._fixes = fixes
         if text is not None:
             self.fix(text)

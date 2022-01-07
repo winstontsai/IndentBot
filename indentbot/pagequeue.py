@@ -98,7 +98,7 @@ def continuous_page_generator(chunk, delay):
         tstart = time.perf_counter()
         current_time = SITE.server_time()
         cutoff = current_time - delay
-        check_stop_or_resume(old_time + sec)
+        check_pause_or_resume(old_time + sec, current_time)
         if not PAUSED:
             # get new changes
             for page in recent_changes(old_cutoff + sec, cutoff):
@@ -208,7 +208,7 @@ def should_edit(change, cache):
     return cache[title]
 
 
-def check_stop_or_resume(starttime):
+def check_pause_or_resume(start, end):
     """
     Stop or resume the bot based on a talk page edits.
     Currently, the policy is that any autoconfirmed user or admin can stop
@@ -216,7 +216,7 @@ def check_stop_or_resume(starttime):
     """
     global PAUSED
     page = Page(SITE, 'User talk:IndentBot')
-    for rev in page.revisions(starttime=starttime, reverse=True):
+    for rev in page.revisions(starttime=start, endtime=end, reverse=True):
         cmt, user = rev.get('comment', ''), rev['user']
         revid, ts = rev.revid, rev.timestamp.isoformat()
         is_maintainer = user in pat.MAINTAINERS

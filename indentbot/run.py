@@ -68,12 +68,12 @@ def fix_page(page, fixer):
     """
     title, title_link = page.title(), page.title(as_link=True)
     newtext, score = fixer.fix(page.text)
-    if any(score):
+    if fixer:
         page.text = newtext
         summary = ('Adjusting indentation/list markup'
-            + ' per [[WP:INDENTMIX]], [[WP:INDENTGAP]], and [[WP:LISTGAP]].'
-            + ' {} markup adjustments,'.format(score[0])
-            + ' {} blank lines removed.'.format(score[1])
+            + ' per [[MOS:INDENTMIX]], [[MOS:INDENTGAP]], and [[MOS:LISTGAP]].'
+            + ' ({} markup adjustments,'.format(score[0])
+            + ' {} blank lines removed)'.format(score[1])
             + ' [[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]].')
         try:
             page.save(summary=summary,

@@ -10,6 +10,7 @@ from pywikibot.exceptions import *
 
 import pagequeue
 import patterns as pat
+
 from fixes import fix_gaps, fix_styles
 from textfixer import TF
 
@@ -66,14 +67,13 @@ def fix_page(page, fixer):
     Returns None (or raises an exception) otherwise.
     """
     title, title_link = page.title(), page.title(as_link=True)
-    fixer.fix(page.text)
-    if fixer:
-        page.text = fixer.text
-        score = fixer.score
+    newtext, score = fixer.fix(page.text)
+    if any(score):
+        page.text = newtext
         summary = ('Adjusting indentation markup'
-            + ' per [[MOS:LISTGAP]], [[MOS:INDENTGAP]], and [[MOS:INDENTMIX]].'
-            + ' {} blank lines removed.'.format(score[1])
+            + ' per [[MOS:INDENTMIX]], [[MOS:INDENTGAP]], and [[MOS:LISTGAP]].'
             + ' {} indent markup adjustments.'.format(score[0])
+            + ' {} blank lines removed.'.format(score[1])
             + ' [[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]].')
         try:
             page.save(summary=summary,
@@ -112,12 +112,10 @@ def main(chunk, delay, limit, verbose):
     logger.info(('Starting run. '
         '(chunk={}, delay={}, limit={})').format(chunk, delay, limit))
     t1 = time.perf_counter()
+    FIXER = TF(fix_styles, fix_gaps)
     count = 0
-    for p in pagequeue.continuous_page_generator(chunk=chunk, delay=delay):
-        if pagequeue.is_stopped():
-            continue
-        fixer = TF(fix_styles, fix_gaps)
-        diff = fix_page(p, fixer)
+    for p in pagequeue.continuous_page_generator(chunk, delay):
+        diff = fix_page(p, FIXER)
         if diff:
             count += 1
             if verbose:

@@ -106,7 +106,7 @@ def fix_gaps(text, squish=True):
 ################################################################################
 # STYLE
 ################################################################################
-def fix_styles(text):
+def fix_styles(text, hide_extra_bullets=True):
     lines, score = line_partition(text), 0
     new_lines = []
     prev_lvl, prev_indent = 0, ''
@@ -116,6 +116,7 @@ def fix_styles(text):
             new_lines.append(line)
             prev_lvl, prev_indent = 0, ''
             continue
+        last_bullet_index = old_indent.rfind('*')
         minlvl = min(lvl, prev_lvl)
         # Don't change style of lines starting with colons and a table,
         # but remember the style.
@@ -139,9 +140,11 @@ def fix_styles(text):
                     new_indent += c1
                 p1 += 1
                 p2 += 1
-            for j in range(p2, lvl):
-                # Hides any leftover floating bullets
-                new_indent += ':' if line[j] == '*' else line[j]
+            if hide_extra_bullets:
+                for j in range(p2, lvl):
+                    new_indent += ':' if line[j] == '*' else line[j]
+            else:
+                new_indent += line[p2:lvl]
         # Always keep original final indent character.
         new_indent = new_indent[:-1] + old_indent[-1]
         new_lines.append(new_indent + line[lvl:])

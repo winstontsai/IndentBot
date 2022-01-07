@@ -28,7 +28,7 @@ SITE.login(user='IndentBot')
 # When stopped, the bot continues tracking edits, but does not edit any pages.
 STOPPED_BY = None
 def is_stopped():
-    return bool(STOPPED_BY)
+    return STOPPED_BY is not None
 
 ################################################################################
 
@@ -101,17 +101,18 @@ def continuous_page_generator(chunk, delay):
         current_time = SITE.server_time()
         cutoff = current_time - delay
         check_stop_or_resume(old_time + sec)
-        # get new changes
-        for page in recent_changes(old_cutoff + sec, cutoff):
-            pq.add_page(page)
-        # yield pages that have waited long enough
-        yield from pq.pop_up_to(cutoff)
+        if not is_stopped():
+            # get new changes
+            for page in recent_changes(old_cutoff + sec, cutoff):
+                pq.add_page(page)
+            # yield pages that have waited long enough
+            yield from pq.pop_up_to(cutoff)
         old_time, old_cutoff = current_time, cutoff
         time.sleep(max(0, 60*chunk - time.perf_counter() + tstart))
 
 
 def recent_changes(start, end):
-    if STOPPED_BY:
+    if is_stopped():
         logger.info('(Edits paused by {}.) '.format(STOPPED_BY)
             + 'Checking edits from {} to {}.'.format(start, end))
     else:
@@ -227,14 +228,14 @@ def check_stop_or_resume(starttime):
         cmt, user = rev.get('comment', ''), rev['user']
         revid, ts = rev.revid, rev.timestamp.isoformat()
         is_maintainer = user in pat.MAINTAINERS
-        groups = User(site, user).groups()
+        groups = User(SITE, user).groups()
         if is_maintainer or 'sysop' in groups:
             can_stop, can_resume = True, True
         elif 'autoconfirmed' in groups:
             can_stop, can_resume = True, False
         else:
             continue
-        if cmt.endswith('STOP') and STOPPED_BY is None and can_stop:
+        if cmt.endswith('STOP') and not is_stopped() and can_stop:
             STOPPED_BY = user
             pat.set_status_page(False)
             logger.warning(
@@ -242,7 +243,7 @@ def check_stop_or_resume(starttime):
                  "    Revid     = {}\n"
                  "    Timestamp = {}\n"
                  "    Comment   = {}".format(user, revid, ts, cmt)))
-        elif cmt.endswith('RESUME') and STOPPED_BY is not None and can_resume:
+        elif cmt.endswith('RESUME') and is_stopped() and can_resume:
             STOPPED_BY = None
             pat.set_status_page(True)
             logger.warning(

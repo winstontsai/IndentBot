@@ -38,8 +38,8 @@ class TF:
                 if s:
                     changed = True
                 score[i] += s
-        self._score = tuple(score)
-        self._text = text
+        score = tuple(score)
+        self._text, self._score = text, score
         return text, score
 
     def __str__(self):

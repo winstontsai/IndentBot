@@ -6,8 +6,6 @@ from calendar import month_name, month_abbr
 import pywikibot as pwb
 import regex as re
 
-from pagequeue import SITE
-
 ################################################################################
 def pattern_count(pattern, text, flags=0):
     return sum(1 for x in re.finditer(pattern, text, flags))
@@ -60,7 +58,7 @@ def diff_template(page, label=None):
 
 
 def set_status_page(status):
-    page = pwb.Page(SITE, 'User:IndentBot/status')
+    page = pwb.Page(pwb.Site('en', 'wikipedia'), 'User:IndentBot/status')
     page.text = status
     page.save(summary='Updating status: {}'.format(status),
               minor=True,

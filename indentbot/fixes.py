@@ -184,6 +184,8 @@ class StyleFix:
                 prev_lvl, prev_indent = 0, ''
             else:
                 prev_lvl, prev_indent = len(new_indent), new_indent
+            if abort_edit(line):
+                return text, 0
             score += new_indent != old_indent
         return ''.join(new_lines), score
 
@@ -302,6 +304,7 @@ def line_partition(text):
     # Even if text does have newline at the end, this is harmless since it
     # just adds an empty string.
     lines.append(text[prev:])
+    #print(lines)
     return lines
 
 ################################################################################
@@ -343,6 +346,15 @@ def has_list_breaking_newline(line):
             return True
     return False
 
+def abort_edit(line):
+    # Abort if there is a wikilink containing a disallowed newline.
+    wt = wtp.parse(line)
+    for x in wt.wikilinks:
+        if len(line_partition(str(x).lstrip('[').rstrip(']'))) > 1:
+            #print(line)
+            return True
+    return False
+
 def find_all(s, sub, start=0, end=None):
     """
     Yields start indices of non-overlapping instances of the substring sub in s.
@@ -356,4 +368,9 @@ def find_all(s, sub, start=0, end=None):
             return
         yield start
         start += len(sub)
+
+if __name__ == "__main__":
+    pass
+
+
 

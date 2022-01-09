@@ -217,10 +217,12 @@ def check_pause_or_resume(start, end):
     global PAUSED
     page = Page(SITE, 'User talk:IndentBot')
     for rev in page.revisions(starttime=start, endtime=end, reverse=True):
-        cmt, user = rev.get('comment', ''), rev['user']
-        revid, ts = rev.revid, rev.timestamp.isoformat()
-        is_maintainer = user in pat.MAINTAINERS
+        user = rev['user']
         groups = User(SITE, user).groups()
+        cmt = rev.get('comment', '')
+        revid = rev.revid
+        ts = rev.timestamp.isoformat()
+        is_maintainer = user in pat.MAINTAINERS
         if is_maintainer or 'sysop' in groups:
             can_stop, can_resume = True, True
         elif 'autoconfirmed' in groups:

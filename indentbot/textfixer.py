@@ -86,11 +86,16 @@ class TF:
         return self._score
 
     @property
+    def total_score(self):
+        return sum(self.score)
+    
+
+    @property
     def normalized_score(self, chunksize=10000):
         """
         Represents the average total error score of a
         chunk of chunksize characters.
         """
-        return chunksize * sum(self.score) / len(self.original_text)
+        return round(chunksize*self.total_score/len(self.original_text), 2)
 
 

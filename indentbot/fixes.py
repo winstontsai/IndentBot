@@ -184,7 +184,7 @@ class StyleFix:
                 prev_lvl, prev_indent = 0, ''
             else:
                 prev_lvl, prev_indent = len(new_indent), new_indent
-            if abort_edit(line):
+            if abort_fix(line):
                 return text, 0
             score += new_indent != old_indent
         return ''.join(new_lines), score
@@ -346,7 +346,7 @@ def has_list_breaking_newline(line):
             return True
     return False
 
-def abort_edit(line):
+def abort_fix(line):
     # Abort if there is a wikilink containing a disallowed newline.
     wt = wtp.parse(line)
     for x in wt.wikilinks:

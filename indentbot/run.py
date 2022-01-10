@@ -21,11 +21,11 @@ def get_args():
         description=('Bot that helps maintain consistent and correct '
             'indentation in discussion pages on Wikipedia.'))
 
-    parser.add_argument('-c', '--chunk', type=int,
-        help='minimum minutes between recent changes checkpoints')
+    parser.add_argument('chunk', type=int,
+        help='minimum minutes between checkpoints')
 
-    parser.add_argument('-d', '--delay', type=int,
-        help='minimum minutes before fixing a page')
+    parser.add_argument('delay', type=int,
+        help='minimum minutes of delay before fixing a page')
 
     parser.add_argument('-l', '--logfile',
         help='log filename (default: $HOME/logs/indentbot.log)')
@@ -111,7 +111,8 @@ def main(chunk, delay, limit, verbose):
     logger.info(('Starting run. '
         '(chunk={}, delay={}, limit={})').format(chunk, delay, limit))
     t1 = time.perf_counter()
-    FIXER = TF(StyleFix(1), fix_gaps)
+    FIXER = TF(StyleFix(1),
+               GapFix(min_closing_lvl=2, single_only=True))
     count = 0
     for p in pagequeue.continuous_page_generator(chunk, delay):
         diff = fix_page(p, FIXER)
@@ -130,20 +131,21 @@ def main(chunk, delay, limit, verbose):
 def run():
     args = get_args()
     set_up_logging(logfile=args.logfile)
-    main(chunk=args.chunk,
-         delay=args.delay,
-         limit=args.total,
-         verbose=args.verbose)
-
-
-if __name__ == '__main__':
-    logger = logging.getLogger('indentbot_logger')
     pat.set_status_page('active')
     try:
-        run()
+        main(chunk=args.chunk,
+             delay=args.delay,
+             limit=args.total,
+             verbose=args.verbose)
     except BaseException as e:
         logger.error('Ending run due to {}.'.format(type(e).__name__))
         raise
     finally:
         pat.set_status_page('inactive')
+
+
+
+if __name__ == '__main__':
+    logger = logging.getLogger('indentbot_logger')
+    run()
 

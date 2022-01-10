@@ -94,9 +94,7 @@ OTHER_SPACES = (4, 10)
 NAMESPACES = TALK_SPACES + OTHER_SPACES
 
 # BAD_PREFIXES = ('Wikipedia:Templates for discussion/', )
-BAD_TITLE_PREFIXES = frozenset([])
-
-TEMPLATE_PREFIXES = frozenset(['Template:Did you know nominations/'])
+BAD_TITLE_PREFIXES = frozenset(['Wikipedia:Arbitration/Requests/',])
 
 SANDBOXES = frozenset([
     'Wikipedia:Sandbox',

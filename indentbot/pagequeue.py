@@ -127,11 +127,11 @@ def recent_changes(start, end):
 ################################################################################
 # Helper functions
 ################################################################################
-def is_talk_namespace(namespace_num):
+def talk_namespace(namespace_num):
     return namespace_num % 2 == 1
 
 
-def is_sandbox(title):
+def sandbox(title):
     """
     Return True if the title looks like it belongs to a sandbox.
     """
@@ -140,21 +140,21 @@ def is_sandbox(title):
     return bool(re.search(r'/[sS]andbox(?: ?\d+)?(?:/|\Z)', title))
 
 
-def is_valid_template_page(title):
+def valid_template_page(title):
     """
     Only edit certain template pages.
     An "opt-in" for the template namespace.
     """
-    return any(title.startswith(x) for x in pat.TEMPLATE_PREFIXES)
+    return title.startswith('Template:Did you know nominations/')
 
 
 def title_filter(title):
     """
-    Returns True iff a page should NOT be edited based on its title.
+    Returns True iff a page should NOT be edited based on its title only.
     """
-    if is_sandbox(title):
+    if sandbox(title):
         return True
-    if title.startswith('Template:') and not is_valid_template_page(title):
+    if title.startswith('Template:') and not valid_template_page(title):
         return True
     if any(title.startswith(x) for x in pat.BAD_TITLE_PREFIXES):
         return True
@@ -201,7 +201,7 @@ def should_edit(change, cache):
     if title not in cache:
         cache[title] = Page(SITE, title)
     text = cache[title].text
-    if not is_talk_namespace(change['ns']) and not has_n_sigs(text, 5):
+    if not talk_namespace(change['ns']) and not has_n_sigs(text, 5):
         return False
     if not has_sig_with_timestamp(text, ts):
         return False
@@ -222,8 +222,8 @@ def check_pause_or_resume(start, end):
         cmt = rev.get('comment', '')
         revid = rev.revid
         ts = rev.timestamp.isoformat()
-        is_maintainer = user in pat.MAINTAINERS
-        if is_maintainer or 'sysop' in groups:
+        maintainer = user in pat.MAINTAINERS
+        if maintainer or 'sysop' in groups:
             can_stop, can_resume = True, True
         elif 'autoconfirmed' in groups:
             can_stop, can_resume = True, False

@@ -4,62 +4,94 @@ This module defines functions to fix some text.
 import regex as re
 import wikitextparser as wtp
 
+from pagequeue import SITE
+
 from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
                       SIGNATURE_PATTERN)
 
 ################################################################################
 # GAPS
 ################################################################################
-def fix_gaps(text, squish=True):
-    lines, score = line_partition(text), 0
-    n = len(lines)
-    # Remove certain lines with indent, but no content.
-    for i in range(1, n):
-        prev_line = lines[i - 1]
-        m = re.match(r'([:*#]+) *\n?\Z', prev_line)
-        # If level doesn't increase, just leave it.
-        if not m or indent_lvl(lines[i]) <= indent_lvl(prev_line):
-            continue
-        # Otherwise remove it.
-        lines[i - 1] = ''
-        score += 1
+class GapFix:
+    def __init__(self, min_closing_lvl=2, single_only=True, monotonic=True):
+        """
+        The parameter min_closing_lvl determines the minimum indent level
+        the closing line of a gap needs to be to have it removed.
 
-    lines = [x for x in lines if x]
-    n = len(lines)
-    i = 0
-    while i < n:
-        txt_i, lvl_i = indent_text_lvl(lines[i])
-        # don't care about non-indented lines
-        if lvl_i == 0:
-            i += 1; continue
-        # find next non-blank line
-        for j in range(i + 1, n):
-            if not is_blank_line(lines[j]):
+        For example, if min_closing_lvl == 2, then the gap here:
+        * Comment 1
+
+        :: Comment 2
+
+        will be removed, but the gap here:
+        : Comment 1
+
+        : Comment 2
+
+        will not be removed.
+
+        The parameter single_only, if True, means that only length 1 gaps
+        are removed.
+
+        The parameter monotonic, if True, means that a gap between an opening
+        line with level > 1 and a closing line with level == 1 will not be
+        removed.
+        """
+        if min_closing_lvl < 1:
+            raise ValueError('min_closing_lvl must be at least 1')
+        self.min_closing_lvl = min_closing_lvl
+        self.single_only = single_only
+        self.monotonic = monotonic
+
+    def __call__(self, text):
+        lines, score = line_partition(text), 0
+        n = len(lines)
+        # Remove certain lines with indent, but no content.
+        for i in range(1, n):
+            prev_line = lines[i - 1]
+            m = re.match(r'([:*#]+) *\n?\Z', prev_line)
+            # If level doesn't increase, just leave it.
+            if not m or indent_lvl(lines[i]) <= indent_lvl(prev_line):
+                continue
+            # Otherwise remove it.
+            lines[i - 1] = ''
+            score += 1
+
+        lines = [x for x in lines if x]
+        n = len(lines)
+        i = 0
+        while i < n:
+            txt_i, lvl_i = indent_text_lvl(lines[i])
+            # don't care about non-indented lines
+            if lvl_i == 0:
+                i += 1; continue
+            # find next non-blank line
+            for j in range(i + 1, n):
+                if not is_blank_line(lines[j]):
+                    break
+            else:
                 break
-        else:
-            break
-        txt_j, lvl_j = indent_text_lvl(lines[j])
-        # closing line should be indented
-        if lvl_j < 2 - squish:
-            i = j; continue
-        # Only remove single-line gaps for which the closing line
-        # has level > 1, or for which one of
-        # the opening and closing lines prefixes the other.
-        if j - i != 2:
-            safe_to_remove = False
-        elif lvl_j > 1:
+            txt_j, lvl_j = indent_text_lvl(lines[j])
+
             safe_to_remove = True
-        elif txt_j.startswith(txt_i) or txt_i.startswith(txt_j):
-            safe_to_remove = True
-        else:
-            safe_to_remove = False
-        if safe_to_remove:
-            for k in range(i + 1, j):
-                lines[k] = ''
-                score += 1
-        i = j
-    lines = [x for x in lines if x]
-    return ''.join(lines), score
+            if self.single_only and j - i != 2:
+                safe_to_remove = False
+            elif lvl_j < self.min_closing_lvl:
+                safe_to_remove = False
+            elif self.monotonic and 1 == lvl_j < lvl_i:
+                safe_to_remove = False
+            elif lvl_j == 1 and txt_j != txt_i[0]:
+                # never remove gap if the sole indent character of the closing
+                # line does not match the opening line's first character.
+                safe_to_remove = False
+            if safe_to_remove:
+                for k in range(i + 1, j):
+                    lines[k] = ''
+                    score += 1
+            i = j
+        lines = [x for x in lines if x]
+        return ''.join(lines), score
+
 
 ################################################################################
 # LEVELS
@@ -190,6 +222,66 @@ class StyleFix:
         return ''.join(new_lines), score
 
 
+
+# Working on recognizing tables.
+def fix_styles2(text):
+    lines, score = line_partition(text), 0
+
+    table_indices = begins_with_table(lines)
+
+    new_lines = []
+    prev_lvl, prev_indent = 0, ''
+    for i, line in enumerate(lines):
+        old_indent, lvl = indent_text_lvl(line)
+        if lvl == 0:
+            new_lines.append(line)
+            prev_lvl, prev_indent = 0, ''
+            continue
+        minlvl = min(lvl, prev_lvl)
+        # Don't change style of lines starting with colons and a table,
+        # but remember the style.
+        if i in table_indices:
+            new_indent = old_indent
+        else:
+            new_indent = ''
+            p1, p2 = 0, 0
+            while p1 < minlvl and p2 < lvl:
+                c1 = prev_indent[p1]
+                c2 = line[p2]
+                if c1 == '#':
+                    if p2 < lvl - 2 and '#' not in line[p2:p2+2]:
+                        new_indent += '#'
+                        p2 += 1
+                    else:
+                        new_indent += c2
+                elif c2 == '#':
+                    new_indent += c2
+                else:
+                    new_indent += c1
+                p1 += 1
+                p2 += 1
+            
+            last_bullet_index = old_indent.rfind('*')
+            for j in range(p2, lvl):
+                if j == last_bullet_index:
+                    new_indent += '*'
+                elif line[j] == '*':
+                    new_indent += ':'
+                else:
+                    new_indent += line[j]
+        # Always keep original final indent character.
+        new_indent = new_indent[:-1] + old_indent[-1]
+        new_lines.append(new_indent + line[lvl:])
+        if i in table_indices or has_list_breaking_newline(line):
+            prev_lvl, prev_indent = 0, ''
+        else:
+            prev_lvl, prev_indent = len(new_indent), new_indent
+        if abort_fix(line):
+            return text, 0
+        score += new_indent != old_indent
+    return ''.join(new_lines), score
+
+
 # THIS VERSION (almost) ALWAYS KEEPS THE RIGHT-MOST '*' CHARACTER.
 # def fix_styles3(text):
 #     lines, score = line_partition(text), 0
@@ -310,6 +402,20 @@ def line_partition(text):
 ################################################################################
 # Helper functions
 ################################################################################
+def find_all(s, sub, start=0, end=None):
+    """
+    Yields start indices of non-overlapping instances of the substring sub in s.
+    Only searches between start and end.
+    """
+    if end is None:
+        end = len(s)
+    while True:
+        start = s.find(sub, start, end)
+        if start == -1:
+            return
+        yield start
+        start += len(sub)
+
 def is_blank_line(line):
     return bool(re.fullmatch(r'\s+', line))
 
@@ -355,19 +461,39 @@ def abort_fix(line):
             return True
     return False
 
-def find_all(s, sub, start=0, end=None):
+def expand_list(l, title=None):
     """
-    Yields start indices of non-overlapping instances of the substring sub in s.
-    Only searches between start and end.
+    Takes a list of strings l and returns a list L such that L[i] is
+    the result of expanding l[i]. REMOVES COMMENTS.
     """
-    if end is None:
-        end = len(s)
-    while True:
-        start = s.find(sub, start, end)
-        if start == -1:
-            return
-        yield start
-        start += len(sub)
+    if not l:
+        return []
+    DELIMITER = 'zaaaaaINDENTBOT DELIMITERaaaaaaz'
+    z = DELIMITER.join(l)
+    z = SITE.expand_text(z, title=title, includecomments=False)
+    z = z.split(DELIMITER)
+    return [z[i] for i in range(len(l))]
+
+def begins_with_table(lines):
+    """
+    Return a set containing the indices of lines which are both indented
+    and begin with a table either using "{|" directly or through a template.
+    """
+    answer = set()
+    expand_indices = []
+    expand_lines = []
+    for i, line in enumerate(lines):
+        lvl = indent_lvl(line)
+        if lvl:
+            expand_indices.append(i)
+            expand_lines.append(line[lvl:])
+    expand_lines = expand_list(expand_lines)
+    for ind, eline in zip(expand_indices, expand_lines):
+        if eline.lstrip().startswith('{|'):
+            answer.add(ind)
+    return answer
+
+
 
 if __name__ == "__main__":
     pass

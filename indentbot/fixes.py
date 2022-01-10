@@ -16,10 +16,10 @@ class GapFix:
     def __init__(self, min_closing_lvl=2, single_only=True, monotonic=True):
         """
         The parameter min_closing_lvl determines the minimum indent level
-        the closing line of a gap needs to be to have it removed.
+        the closing line of a gap needs to be to have the gap removed.
 
         For example, if min_closing_lvl == 2, then the gap here:
-        * Comment 1
+        : Comment 1
 
         :: Comment 2
 
@@ -35,7 +35,13 @@ class GapFix:
 
         The parameter monotonic, if True, means that a gap between an opening
         line with level > 1 and a closing line with level == 1 will not be
-        removed.
+        removed, e.g. the gap here:
+        * Comment 1
+        ** Comment 2
+
+        * Comment 3
+
+        will not be removed.
         """
         if min_closing_lvl < 1:
             raise ValueError('min_closing_lvl must be at least 1')
@@ -92,48 +98,6 @@ class GapFix:
         lines = [x for x in lines if x]
         return ''.join(lines), score
 
-
-################################################################################
-# LEVELS
-################################################################################
-# def fix_levels(text, maximum=1):
-#     """
-#     NOT BEING USED. NOT BEING USED. NOT BEING USED. NOT BEING USED.
-#     Remove over-indentation. Over-indents with more than maximum
-#     extra indents are not altered.
-#     """
-#     lines, score = line_partition(text), 0
-#     lines.insert(0, '\n') # for handling first line edge case
-#     n = len(lines)
-#     for i in range(n - 1):
-#         l1, l2 = lines[i:i+2]
-#         x, y = indent_lvl(l1), indent_lvl(l2)
-#         # only remove overindentation when already inside a list
-#         if x == 0:
-#             continue
-#         diff = y - x
-#         if diff <= 1:
-#             continue
-#         # leave overindentation with over maximum indents
-#         if diff > 1 + maximum:
-#             continue
-#         # check that visually it is an overindentation
-#         if visual_lvl(l2) - visual_lvl(l1) <= 1:
-#             continue
-#         # if x and lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
-#         #     diff -= 1
-#         for j in range(i + 1, n):
-#             l = lines[j]
-#             z = indent_lvl(l)
-#             if z < y:
-#                 break
-#             if '#' in l[x:y-1] and l[y-1] != '#':
-#                 break
-#             lines[j] = l[:x] + l[x + diff - 1:] # cut out l[x:y-1]
-#             score += diff - 1
-
-#     lines = lines[1:] # don't return the extra line we inserted
-#     return ''.join(lines), score
 
 ################################################################################
 # STYLE
@@ -468,7 +432,7 @@ def expand_list(l, title=None):
     """
     if not l:
         return []
-    DELIMITER = 'zaaaaaINDENTBOT DELIMITERaaaaaaz'
+    DELIMITER = '\nzaaaaaINDENTBOT DELIMITERaaaaaaz\n'
     z = DELIMITER.join(l)
     z = SITE.expand_text(z, title=title, includecomments=False)
     z = z.split(DELIMITER)
@@ -478,6 +442,7 @@ def begins_with_table(lines):
     """
     Return a set containing the indices of lines which are both indented
     and begin with a table either using "{|" directly or through a template.
+    Does not check for <table> html tags.
     """
     answer = set()
     expand_indices = []
@@ -494,9 +459,50 @@ def begins_with_table(lines):
     return answer
 
 
-
 if __name__ == "__main__":
     pass
 
+
+################################################################################
+# LEVELS
+################################################################################
+# def fix_levels(text, maximum=1):
+#     """
+#     NOT BEING USED. NOT BEING USED. NOT BEING USED. NOT BEING USED.
+#     Remove over-indentation. Over-indents with more than maximum
+#     extra indents are not altered.
+#     """
+#     lines, score = line_partition(text), 0
+#     lines.insert(0, '\n') # for handling first line edge case
+#     n = len(lines)
+#     for i in range(n - 1):
+#         l1, l2 = lines[i:i+2]
+#         x, y = indent_lvl(l1), indent_lvl(l2)
+#         # only remove overindentation when already inside a list
+#         if x == 0:
+#             continue
+#         diff = y - x
+#         if diff <= 1:
+#             continue
+#         # leave overindentation with over maximum indents
+#         if diff > 1 + maximum:
+#             continue
+#         # check that visually it is an overindentation
+#         if visual_lvl(l2) - visual_lvl(l1) <= 1:
+#             continue
+#         # if x and lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
+#         #     diff -= 1
+#         for j in range(i + 1, n):
+#             l = lines[j]
+#             z = indent_lvl(l)
+#             if z < y:
+#                 break
+#             if '#' in l[x:y-1] and l[y-1] != '#':
+#                 break
+#             lines[j] = l[:x] + l[x + diff - 1:] # cut out l[x:y-1]
+#             score += diff - 1
+
+#     lines = lines[1:] # don't return the extra line we inserted
+#     return ''.join(lines), score
 
 

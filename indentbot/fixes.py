@@ -244,8 +244,19 @@ class StyleFix:
 ################################################################################
 def line_partition(text):
     """
-    This version better conforms to how Wikipedia treats line breaks with
-    respect to lists.
+    Partition wikitext into lines, respecting how newlines interact with lists.
+    The general idea is that we split on all newline characters
+    except for those which either
+    1. Do not break lists, or
+    2. Might result in the bot editing text which should not be edited, e.g.
+    text inside <pre> tags.
+
+    In case 2, such newline characters may break lists, in contrast with
+    case 1, so later we need a way to check if a line (as determined by
+    this function) contains a case 2 newline character.
+    This is done by the function has_list_breaking_newline.
+    That way we do not perform an indent style fix incorrectly on subsequent
+    lines.
     """
     wt = wtp.parse(text)
     bad_indices = set()
@@ -299,7 +310,6 @@ def line_partition(text):
     # Even if text does have newline at the end, this is harmless since it
     # just adds an empty string.
     lines.append(text[prev:])
-    #print(lines)
     return lines
 
 ################################################################################
@@ -356,11 +366,14 @@ def has_list_breaking_newline(line):
     return False
 
 def abort_fix(line):
+    """
+    Last resort for difficult edge cases. In these cases,
+    just don't apply the fix.
+    """
     # Abort if there is a wikilink containing a disallowed newline.
     wt = wtp.parse(line)
     for x in wt.wikilinks:
         if len(line_partition(str(x).lstrip('[').rstrip(']'))) > 1:
-            #print(line)
             return True
     return False
 

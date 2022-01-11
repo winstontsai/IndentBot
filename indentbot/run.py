@@ -116,8 +116,7 @@ def main(chunk, delay, limit, threshold, verbose):
         '(chunk={}, delay={}, limit={})').format(chunk, delay, limit))
     t1 = time.perf_counter()
     FIXER = TF(StyleFix(1),
-               GapFix(min_closing_lvl=2, single_only=True, monotonic=True)
-            )
+               GapFix(min_closing_lvl=2, single_only=True, monotonic=True))
     count = 0
     for p in pagequeue.continuous_page_generator(chunk, delay):
         diff = fix_page(p, FIXER, threshold=threshold)

@@ -101,24 +101,26 @@ class GapFix:
 # STYLE
 ################################################################################
 class StyleFix:
-    def __init__(self, hide_extra_bullets=0, keep_last_bullet=False):
+    def __init__(self, hide_extra_bullets=1, keep_last_bullet=False):
         """
         The parameter hide_extra_bullets determines how "floating"
         bullets that occur inside an abnormal level increase are treated.
         Example:
-
-        * Comment 1.
-        ***: Comment 2.
-
-        Consider the second and third bullets of Comment 2.
+            * Comment 1.
+            ***: Comment 2.
+        Consider the second and third bullet points of Comment 2.
         If hide_extra_bullets == 0, then they are left alone.
-        If hide_extra_bullets == 1, then only the rightmost bullet is kept,
-            so only the second bullet is hidden.
-        If hide_extra_bullets == 2, then both the second and third bullets
-            are hidden.
+        If hide_extra_bullets == 1, then only the rightmost bullet is kept
+            and the others (in this case just the second) get hidden.
+        If hide_extra_bullets == 2, then all floating bullets inside the
+            level increase, with the exception of the final indent character,
+            will be hidden. In this case, this means both the second and third
+            bullets will be hidden.
 
-        If the final indent character for Comment 2 was '*', then 1 and 2
-        will have the same behavior and both the second and third bullets
+        So the higher the integer, the more aggressive the hiding.
+
+        If the final indent character for Comment 2 was '*', then case 1 and 2
+        would have the same behavior and both the second and third bullets
         of Comment 2 would be removed. This is because the rightmost bullet
         would be the final indent character, which is always preserved.
         """

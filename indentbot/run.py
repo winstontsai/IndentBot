@@ -112,11 +112,21 @@ def fix_page(page, fixer, threshold):
 
 
 def main(chunk, delay, limit, threshold, verbose):
+    """
+    Keep in mind the parameters for each fix being used.
+    In particular, for the GapFix class,
+    a practical min_closing_lvl is either 1 or 2.
+    Note that 1 is better for screen readers and isn't noticeably visually
+    distinct from 2, but modifying even just the wikitext may
+    annoy editors leaving gaps either to organize the wikitext or
+    just out of preference. However, we shouldn't compromise
+    on gaps where the closing line has indent level greater than 1.
+    """
     logger.info(('Starting run. '
         '(chunk={}, delay={}, limit={})').format(chunk, delay, limit))
     t1 = time.perf_counter()
     FIXER = TF(StyleFix(1),
-               GapFix(min_closing_lvl=2, single_only=True, monotonic=True))
+               GapFix(min_closing_lvl=1, single_only=True, monotonic=True))
     count = 0
     for p in pagequeue.continuous_page_generator(chunk, delay):
         diff = fix_page(p, FIXER, threshold=threshold)
@@ -147,7 +157,6 @@ def run():
         raise
     finally:
         pat.set_status_page('inactive')
-
 
 
 if __name__ == '__main__':

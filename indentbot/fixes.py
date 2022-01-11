@@ -13,7 +13,7 @@ from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
 # GAPS
 ################################################################################
 class GapFix:
-    def __init__(self, min_closing_lvl=2, single_only=True, monotonic=True):
+    def __init__(self, min_closing_lvl=2, max_gaplen=1, monotonic=True):
         """
         With the most liberal settings, all gaps (sequences of blank lines)
         between two indented lines will be removed. The parameters serve
@@ -32,12 +32,12 @@ class GapFix:
             : Comment 2
         will not be removed.
 
-        The parameter single_only, if True, means that only length 1 gaps
-        are removed and longer gaps are not removed.
+        Similarly, max_gaplen is the maximum length a gap that is removed
+        can be.
 
         The parameter monotonic, if True, means that a gap between an opening
         line with level > 1 and a closing line with level == 1 will not be
-        removed.
+        removed. (monotonic is somewhat of a misnomer)
 
         Note that if min_closing_lvl >= 2, then the value of the parameter
         monotonic is irrelevant and it will effectively be True since gaps with
@@ -46,7 +46,7 @@ class GapFix:
         if min_closing_lvl < 1:
             raise ValueError('min_closing_lvl should be a positive integer')
         self.min_closing_lvl = min_closing_lvl
-        self.single_only = bool(single_only)
+        self.max_gaplen = max_gaplen
         self.monotonic = bool(monotonic)
 
     def __call__(self, text):
@@ -62,7 +62,6 @@ class GapFix:
             # Otherwise remove it.
             lines[i - 1] = ''
             score += 1
-
         lines = [x for x in lines if x]
         n = len(lines)
         i = 0
@@ -77,24 +76,35 @@ class GapFix:
                     break
             else:
                 break
-            txt_j, lvl_j = indent_text_lvl(lines[j])
-            if self.single_only and j - i != 2:
-                pass
-            elif lvl_j < self.min_closing_lvl:
-                pass
-            elif self.monotonic and 1 == lvl_j < lvl_i:
-                pass
-            elif lvl_j == 1 and txt_j != txt_i[0]:
-                # never remove gap if the sole indent character of the closing
-                # line does not match the opening line's first character.
-                pass
-            else:
+            txt_j = indent_text(lines[j])
+            if self._removable_gap(txt_i, txt_j, j - i - 1):
                 for k in range(i + 1, j):
                     lines[k] = ''
                     score += 1
             i = j
         lines = [x for x in lines if x]
         return ''.join(lines), score
+
+    def _removable_gap(self, opening, closing, gaplen):
+        """
+        Opening is the opening line's indent characters.
+        Closing is the closing line's indent characters.
+        Gaplen is the length of the gap under consideration.
+        Returns True if and only if the gap should be removed.
+        """
+        len1, len2 = len(opening), len(closing)
+        if gaplen < 1 or gaplen > self.max_gaplen:
+            return False
+        if len2 < self.min_closing_lvl:
+            return False
+        if self.monotonic and len2 == 1 < len1:
+            return False
+        if len2 == 1 and closing != opening[0]:
+            # never remove gap if the sole indent character of the closing
+            # line does not match the opening line's first character.
+            return False
+        return True
+
 
 
 ################################################################################
@@ -435,48 +445,4 @@ def begins_with_table(lines):
 
 if __name__ == "__main__":
     pass
-
-
-################################################################################
-# LEVELS
-################################################################################
-# def fix_levels(text, maximum=1):
-#     """
-#     NOT BEING USED. NOT BEING USED. NOT BEING USED. NOT BEING USED.
-#     Remove over-indentation. Over-indents with more than maximum
-#     extra indents are not altered.
-#     """
-#     lines, score = line_partition(text), 0
-#     lines.insert(0, '\n') # for handling first line edge case
-#     n = len(lines)
-#     for i in range(n - 1):
-#         l1, l2 = lines[i:i+2]
-#         x, y = indent_lvl(l1), indent_lvl(l2)
-#         # only remove overindentation when already inside a list
-#         if x == 0:
-#             continue
-#         diff = y - x
-#         if diff <= 1:
-#             continue
-#         # leave overindentation with over maximum indents
-#         if diff > 1 + maximum:
-#             continue
-#         # check that visually it is an overindentation
-#         if visual_lvl(l2) - visual_lvl(l1) <= 1:
-#             continue
-#         # if x and lines[i][x-1]=='#' and lines[i+1][y-1] != ':':
-#         #     diff -= 1
-#         for j in range(i + 1, n):
-#             l = lines[j]
-#             z = indent_lvl(l)
-#             if z < y:
-#                 break
-#             if '#' in l[x:y-1] and l[y-1] != '#':
-#                 break
-#             lines[j] = l[:x] + l[x + diff - 1:] # cut out l[x:y-1]
-#             score += diff - 1
-
-#     lines = lines[1:] # don't return the extra line we inserted
-#     return ''.join(lines), score
-
 

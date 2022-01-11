@@ -33,6 +33,9 @@ def get_args():
     parser.add_argument('-t', '--total', type=int, default=float('inf'),
         help='maximum number of edits to make (default: inf)')
 
+    parser.add_argument('--threshold', type=int, default=1,
+        help='minimum total error score for an edit to be made (default: 1)')
+
     parser.add_argument('-v', '--verbose', action='store_true',
         help='print the {{Diff2}} template for successful edits')
     return parser.parse_args()
@@ -60,7 +63,7 @@ def set_up_logging(logfile):
     logger.setLevel(logging.INFO)
 
 
-def fix_page(page, fixer):
+def fix_page(page, fixer, threshold):
     """
     Apply fixes to a page and save it if there was a change in the text.
     If save is successful, returns a string for Template:Diff2.
@@ -68,7 +71,7 @@ def fix_page(page, fixer):
     """
     title, title_link = page.title(), page.title(as_link=True)
     newtext, score = fixer.fix(page.text)
-    if fixer:
+    if fixer and fixer.total_score >= threshold:
         page.text = newtext
         summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]],'
             + ' [[MOS:INDENTGAP|INDENTGAP]], and [[MOS:LISTGAP|LISTGAP]].'
@@ -107,16 +110,17 @@ def fix_page(page, fixer):
         else:
             return pat.diff_template(page)
 
-def main(chunk, delay, limit, verbose):
+
+def main(chunk, delay, limit, threshold, verbose):
     logger.info(('Starting run. '
         '(chunk={}, delay={}, limit={})').format(chunk, delay, limit))
     t1 = time.perf_counter()
     FIXER = TF(StyleFix(1),
-               GapFix(min_closing_lvl=1, single_only=True, monotonic=True)
+               GapFix(min_closing_lvl=2, single_only=True, monotonic=True)
             )
     count = 0
     for p in pagequeue.continuous_page_generator(chunk, delay):
-        diff = fix_page(p, FIXER)
+        diff = fix_page(p, FIXER, threshold=threshold)
         if diff:
             count += 1
             if verbose:
@@ -137,6 +141,7 @@ def run():
         main(chunk=args.chunk,
              delay=args.delay,
              limit=args.total,
+             threshold=args.threshold,
              verbose=args.verbose)
     except BaseException as e:
         logger.error('Ending run due to {}.'.format(type(e).__name__))

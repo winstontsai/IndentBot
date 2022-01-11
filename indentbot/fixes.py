@@ -13,35 +13,35 @@ from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
 # GAPS
 ################################################################################
 class GapFix:
-    def __init__(self, min_closing_lvl=1, single_only=True, monotonic=True):
+    def __init__(self, min_closing_lvl=2, single_only=True, monotonic=True):
         """
+        With the most liberal settings, all gaps (sequences of blank lines)
+        between two indented lines will be removed. The parameters serve
+        to prevent certain gaps from being removed.
+
         The parameter min_closing_lvl determines the minimum indent level
-        the closing line of a gap needs to be to have the gap removed.
-
+        the closing line of a gap needs to be.
         For example, if min_closing_lvl == 2, then the gap here:
-        : Comment 1
+            : Comment 1
 
-        :: Comment 2
+            :: Comment 2
 
         will be removed, but the gap here:
-        : Comment 1
+            : Comment 1
 
-        : Comment 2
-
+            : Comment 2
         will not be removed.
 
         The parameter single_only, if True, means that only length 1 gaps
-        are removed.
+        are removed and longer gaps are not removed.
 
         The parameter monotonic, if True, means that a gap between an opening
         line with level > 1 and a closing line with level == 1 will not be
-        removed, e.g. the gap here:
-        * Comment 1
-        ** Comment 2
+        removed.
 
-        * Comment 3
-
-        will not be removed.
+        Note that if min_closing_lvl >= 2, then the value of the parameter
+        monotonic is irrelevant and it will effectively be True since gaps with
+        closing line having level == 1 will not be removed.
         """
         if min_closing_lvl < 1:
             raise ValueError('min_closing_lvl should be a positive integer')
@@ -133,8 +133,7 @@ class StyleFix:
 
     def __call__(self, text):
         lines, score = line_partition(text), 0
-        # table_indices = begins_with_table(lines)
-        table_indices = set()
+        table_indices = begins_with_table(lines)
         new_lines = []
         prev_lvl, prev_indent = 0, ''
         for i, line in enumerate(lines):
@@ -143,55 +142,65 @@ class StyleFix:
                 new_lines.append(line)
                 prev_lvl, prev_indent = 0, ''
                 continue
-            minlvl = min(lvl, prev_lvl)
-            last_bullet_i = old_indent.rfind('*')
-            new_indent = ''
-            p1, p2 = 0, 0
-            while p1 < minlvl and p2 < lvl:
-                c1 = prev_indent[p1]
-                c2 = line[p2]
-                if self.keep_last_bullet and p2 == last_bullet_i:
-                    new_indent += '*'
-                elif c2 == '#':
-                    new_indent += c2
-                elif c1 == '#':
-                    if (p2 < lvl - 2 and line[p2+1] != '#' and not
-                        (self.keep_last_bullet and p2+1 == last_bullet_i)):
-                        # can replace next two chars with '#' while keeping
-                        # same indent level
-                        new_indent += '#'
-                        p2 += 1
-                    else:
-                        new_indent += c2
-                else:
-                    new_indent += c1
-                p1 += 1
-                p2 += 1
-            if self.hide_extra_bullets == 2:
-                for j in range(p2, lvl):
-                    new_indent += ':' if line[j] == '*' else line[j]
-            elif self.hide_extra_bullets == 1:
-                for j in range(p2, lvl):
-                    if j == last_bullet_i:
-                        new_indent += '*'
-                    else:
-                        new_indent += ':' if line[j] == '*' else line[j]
-            else:
-                new_indent += line[p2:lvl]
-            # Override: don't change style if starting with a table.
+            if abort_fix(line):
+                return text, 0
+
             if i in table_indices:
+                # Don't change style if starting with a table.
                 new_indent = old_indent
-            # Always keep original final indent character.
-            new_indent = new_indent[:-1] + old_indent[-1]
+            else:
+                new_indent = self._match_indent(prev_indent, old_indent)
+
             new_lines.append(new_indent + line[lvl:])
+            score += new_indent != old_indent
             if i in table_indices or has_list_breaking_newline(line):
                 prev_lvl, prev_indent = 0, ''
             else:
                 prev_lvl, prev_indent = len(new_indent), new_indent
-            if abort_fix(line):
-                return text, 0
-            score += new_indent != old_indent
         return ''.join(new_lines), score
+
+    def _match_indent(self, prev_indent, indent2):
+        """
+        Compute new indent for indent2 based on prev_indent.
+        """
+        new_indent = ''
+        p1, p2 = 0, 0
+        lvl = len(indent2)
+        minlvl = min(len(prev_indent), lvl)
+        last_bullet_i = indent2.rfind('*')
+        while p1 < minlvl and p2 < lvl:
+            c1, c2 = prev_indent[p1], indent2[p2]
+            if self.keep_last_bullet and p2 == last_bullet_i:
+                new_indent += '*'
+            elif c2 == '#':
+                new_indent += c2
+            elif c1 == '#':
+                if (p2 < lvl - 2 and indent2[p2+1] != '#' and not
+                    (self.keep_last_bullet and p2 + 1 == last_bullet_i)):
+                    # can replace next two chars with '#' while keeping
+                    # same indent level
+                    new_indent += '#'
+                    p2 += 1
+                else:
+                    new_indent += c2
+            else:
+                new_indent += c1
+            p1 += 1
+            p2 += 1
+        if self.hide_extra_bullets == 2:
+            for j in range(p2, lvl):
+                new_indent += ':' if indent2[j] == '*' else indent2[j]
+        elif self.hide_extra_bullets == 1:
+            for j in range(p2, lvl):
+                if j == last_bullet_i:
+                    new_indent += '*'
+                else:
+                    new_indent += ':' if indent2[j] == '*' else indent2[j]
+        else:
+            new_indent += indent2[p2:]
+        # Always keep original final indent character.
+        new_indent = new_indent[:-1] + indent2[-1]
+        return new_indent
 
 
 # For testing

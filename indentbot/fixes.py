@@ -50,21 +50,8 @@ class GapFix:
         self.monotonic = bool(monotonic)
 
     def __call__(self, text):
-        lines, score = line_partition(text), 0
-        n = len(lines)
-        # Remove certain lines with indent, but no content.
-        for i in range(1, n):
-            prev_line = lines[i - 1]
-            m = re.match(r'([:*#]+) *\n?\Z', prev_line)
-            # If level doesn't increase, just leave it.
-            if not m or indent_lvl(lines[i]) <= indent_lvl(prev_line):
-                continue
-            # Otherwise remove it.
-            lines[i - 1] = ''
-            score += 1
-        lines = [x for x in lines if x]
-        n = len(lines)
-        i = 0
+        lines, score = self._remove_indented_and_blank(line_partition(text))
+        i, n = 0, len(lines)
         while i < n:
             txt_i, lvl_i = indent_text_lvl(lines[i])
             # don't care about non-indented lines
@@ -85,6 +72,25 @@ class GapFix:
         lines = [x for x in lines if x]
         return ''.join(lines), score
 
+    def _remove_indented_and_blank(self, lines):
+        """
+        Removes certain lines which are indented, but otherwise have no
+        content. More specifically, such lines which are followed by a line
+        with a higher indentation level are removed.
+        Returns a new list with those lines removed, and the number of lines
+        removed.
+        """
+        score = 0
+        for i in range(1, len(lines)):
+            prev_line = lines[i - 1]
+            m = re.match(r'([:*#]+) *\n?\Z', prev_line)
+            # If level doesn't increase, just leave it.
+            if not m or indent_lvl(lines[i]) <= len(m[1]):
+                continue
+            lines[i - 1] = ''
+            score += 1
+        return [x for x in lines if x], score
+
     def _removable_gap(self, opening, closing, gaplen):
         """
         Opening is the opening line's indent characters.
@@ -104,8 +110,6 @@ class GapFix:
             # line does not match the opening line's first character.
             return False
         return True
-
-
 
 ################################################################################
 # STYLE

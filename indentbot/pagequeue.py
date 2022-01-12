@@ -33,10 +33,10 @@ PAUSED = False
 class PageQueue:
     def __init__(self):
         self._pq = []
+        self._len = 0
         self._entry_finder = {}
         self._REMOVED = '<removed-task>'
         self._counter = itertools.count(start=1)
-        self._len = 0
 
     def __len__(self):
         return self._len
@@ -88,7 +88,7 @@ class PageQueue:
                         yield self.pop_page()
 
 
-def recent_changes_generator(start, end):
+def recent_changes_gen(start, end):
     """
     Yield recent changes between the timestamps start and end, inclusive,
     with the potential to be edited by IndentBot.
@@ -105,7 +105,7 @@ def recent_changes_generator(start, end):
         yield change
 
 
-def potential_page_generator(changes):
+def potential_page_gen(changes):
     """
     Converts a generator of recent changes to a generator of Page objects
     which have the potential to be edited by IndentBot.
@@ -124,28 +124,36 @@ def potential_page_generator(changes):
                     break
 
 
-def continuous_page_generator(chunk, delay):
+def continuous_page_gen(chunk, delay):
     """
     Check recent changes in intervals of chunk minutes.
     Give at least delay minutes of buffer time before editing.
     Chunk should be a small fraction of delay.
     """
-    pq = PageQueue()
     sec, delay = timedelta(seconds=1), timedelta(minutes=delay)
-    old_time = SITE.server_time() - timedelta(minutes=chunk)
-    old_cutoff = old_time - delay
+    pq = PageQueue()
+    tstart = time.perf_counter()
+    old_time = SITE.server_time()
+    cutoff = old_time - delay
+    pq.add_from(
+        potential_page_gen(
+            recent_changes_gen(cutoff - timedelta(minutes=chunk), old_time)))
+    yield from pq.pop_up_to(cutoff)
+    last_load = old_time
     while True:
+        time.sleep(max(0, 60*chunk - time.perf_counter() + tstart))
         tstart = time.perf_counter()
         current_time = SITE.server_time()
         cutoff = current_time - delay
         check_pause_or_resume(old_time + sec, current_time)
         if not PAUSED:
-            rcgen = recent_changes_generator(old_cutoff + sec, cutoff)
-            pq.add_from(potential_page_generator(rcgen))
+            if last_load < cutoff:
+                rcgen = recent_changes_gen(last_load + sec, current_time)
+                pq.add_from(potential_page_gen(rcgen))
+                last_load = current_time
             yield from pq.pop_up_to(cutoff)
-        old_time, old_cutoff = current_time, cutoff
-        time.sleep(max(0, 60*chunk - time.perf_counter() + tstart))
-
+        old_time = current_time
+        
 
 ################################################################################
 # Helper functions

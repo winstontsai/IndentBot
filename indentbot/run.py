@@ -129,7 +129,7 @@ def mainloop(chunk, delay, limit, threshold, verbose):
     FIXER = TF(StyleFix(1),
                GapFix(min_closing_lvl=1, single_only=True, monotonic=True))
     count = 0
-    for p in pagequeue.continuous_page_generator(chunk, delay):
+    for p in pagequeue.continuous_page_gen(chunk, delay):
         diff = fix_page(p, FIXER, threshold=threshold)
         if diff:
             count += 1

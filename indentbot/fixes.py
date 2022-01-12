@@ -13,7 +13,7 @@ from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
 # GAPS
 ################################################################################
 class GapFix:
-    def __init__(self, min_closing_lvl=2, max_gaplen=1, monotonic=True):
+    def __init__(self, min_closing_lvl=2, max_gap_length=1, monotonic=True):
         """
         With the most liberal settings, all gaps (sequences of blank lines)
         between two indented lines will be removed. The parameters serve
@@ -32,13 +32,11 @@ class GapFix:
             : Comment 2
         will not be removed.
 
-        Similarly, max_gaplen is the maximum length a gap that is removed
-        can be.
+        A gap with length greater than max_gap_length will not be removed.
 
         The parameter monotonic, if True, means that a gap between an opening
         line with level > 1 and a closing line with level == 1 will not be
         removed. (monotonic is somewhat of a misnomer)
-
         Note that if min_closing_lvl >= 2, then the value of the parameter
         monotonic is irrelevant and it will effectively be True since gaps with
         closing line having level == 1 will not be removed.
@@ -46,7 +44,7 @@ class GapFix:
         if min_closing_lvl < 1:
             raise ValueError('min_closing_lvl should be a positive integer')
         self.min_closing_lvl = min_closing_lvl
-        self.max_gaplen = max_gaplen
+        self.max_gap_length = max_gap_length
         self.monotonic = bool(monotonic)
 
     def __call__(self, text):
@@ -99,7 +97,7 @@ class GapFix:
         Returns True if and only if the gap should be removed.
         """
         len1, len2 = len(opening), len(closing)
-        if gaplen < 1 or gaplen > self.max_gaplen:
+        if gaplen < 1 or gaplen > self.max_gap_length:
             return False
         if len2 < self.min_closing_lvl:
             return False
@@ -178,6 +176,10 @@ class StyleFix:
     def _match_indent(self, prev_indent, indent2):
         """
         Compute new indent for indent2 based on prev_indent.
+        In other words, build a new indent by "matching" the indentation
+        characters of the previous indent where possible.
+
+        The final indentation character is never altered.
         """
         new_indent = ''
         p1, p2 = 0, 0
@@ -217,61 +219,6 @@ class StyleFix:
         # Always keep original final indent character.
         new_indent = new_indent[:-1] + indent2[-1]
         return new_indent
-
-
-# For testing
-# def fix_styles2(text):
-#     lines, score = line_partition(text), 0
-#     table_indices = set()
-#     new_lines = []
-#     prev_lvl, prev_indent = 0, ''
-#     for i, line in enumerate(lines):
-#         old_indent, lvl = indent_text_lvl(line)
-#         if lvl == 0:
-#             new_lines.append(line)
-#             prev_lvl, prev_indent = 0, ''
-#             continue
-#         minlvl = min(lvl, prev_lvl)
-#         last_bullet_i = old_indent.rfind('*')
-
-#         # Don't change style of lines starting with colons and a table,
-#         # but remember the style.
-#         if i in table_indices:
-#             new_indent = old_indent
-#         else:
-#             new_indent = ''
-#             p1, p2 = 0, 0
-#             while p1 < minlvl and p2 < lvl:
-#                 c1 = prev_indent[p1]
-#                 c2 = line[p2]
-#                 if c2 == '#':
-#                     new_indent += '#'
-#                 elif c1 == '#':
-#                     if p2 < lvl-2 and '#' != line[p2+1]:
-#                         new_indent += '#'
-#                         p2 += 1
-#                     else:
-#                         new_indent += c2
-#                 else:
-#                     new_indent += c1
-#                 p1 += 1
-#                 p2 += 1
-#             for j in range(p2, lvl):
-#                 if j == last_bullet_i:
-#                     new_indent += '*'
-#                 else:
-#                     new_indent += ':' if line[j] == '*' else line[j]
-#         # Always keep original final indent character.
-#         new_indent = new_indent[:-1] + old_indent[-1]
-#         new_lines.append(new_indent + line[lvl:])
-#         if i in table_indices or has_list_breaking_newline(line):
-#             prev_lvl, prev_indent = 0, ''
-#         else:
-#             prev_lvl, prev_indent = len(new_indent), new_indent
-#         if abort_fix(line):
-#             return text, 0
-#         score += new_indent != old_indent
-#     return ''.join(new_lines), score
 
 
 ################################################################################
@@ -379,8 +326,8 @@ def indent_text_lvl(line):
     return x, len(x)
 
 def visual_lvl(line):
-    # a '#' counts for two lvls
     x = indent_text(line)
+    # '#' counts for two lvls visually
     return len(x) + x.count('#')
 
 def has_list_breaking_newline(line):

@@ -115,14 +115,18 @@ def recent_changes(start, end):
     """
     logger.info('Checking edits from {} to {}.'.format(start, end))
     # page cache for this checkpoint
-    cache = dict()
+    page_cache = dict()
+    yielded = set()
     for change in SITE.recentchanges(
             start=start, end=end, reverse=True,
             changetype='edit', namespaces=pat.NAMESPACES,
             minor=False, bot=False, redirect=False):
-        result = should_edit(change, cache)
+        if change['title'] in yielded:
+            continue
+        result = should_edit(change, page_cache)
         if result:
             yield result
+            yielded.add(result.title())
 
 ################################################################################
 # Helper functions
@@ -137,7 +141,7 @@ def sandbox(title):
     """
     if title in pat.SANDBOXES:
         return True
-    return bool(re.search(r'/[sS]andbox(?: ?\d+)?(?:/|\Z)', title))
+    return bool(re.search(r'/sandbox(?: ?\d+)?(?:/|\Z)', title, flags=re.I))
 
 
 def valid_template_page(title):
@@ -188,7 +192,7 @@ def has_sig_with_timestamp(text, ts):
     return re.search(recent_sig_pat, text)
 
 
-def should_edit(change, cache):
+def should_edit(change, page_cache):
     """
     Return False if we should not edit based on the change.
     Otherwise, return the appropriate Page object.
@@ -198,14 +202,14 @@ def should_edit(change, cache):
     title, ts = change['title'], change['timestamp']
     if title_filter(title):
         return False
-    if title not in cache:
-        cache[title] = Page(SITE, title)
+    if title not in page_cache:
+        page_cache[title] = Page(SITE, title)
     text = cache[title].text
     if not talk_namespace(change['ns']) and not has_n_sigs(text, 5):
         return False
     if not has_sig_with_timestamp(text, ts):
         return False
-    return cache[title]
+    return page_cache[title]
 
 
 def check_pause_or_resume(start, end):
@@ -222,8 +226,7 @@ def check_pause_or_resume(start, end):
         cmt = rev.get('comment', '')
         revid = rev.revid
         ts = rev.timestamp.isoformat()
-        maintainer = user in pat.MAINTAINERS
-        if maintainer or 'sysop' in groups:
+        if user in pat.MAINTAINERS or 'sysop' in groups:
             can_stop, can_resume = True, True
         elif 'autoconfirmed' in groups:
             can_stop, can_resume = True, False
@@ -236,7 +239,7 @@ def check_pause_or_resume(start, end):
                 ("Paused by {}.\n"
                  "    Revid     = {}\n"
                  "    Timestamp = {}\n"
-                 "    Comment   = {}".format(user, revid, ts, cmt)))
+                 "    Comment   = {}").format(user, revid, ts, cmt))
         elif cmt.endswith('RESUME') and PAUSED and can_resume:
             PAUSED = False
             pat.set_status_page('active')
@@ -244,7 +247,7 @@ def check_pause_or_resume(start, end):
                 ("Resumed by {}.\n"
                  "    Revid     = {}\n"
                  "    Timestamp = {}\n"
-                 "    Comment   = {}".format(user, revid, ts, cmt)))
+                 "    Comment   = {}").format(user, revid, ts, cmt))
 
 
 if __name__ == "__main__":

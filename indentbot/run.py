@@ -73,10 +73,10 @@ def fix_page(page, fixer, threshold):
     newtext, score = fixer.fix(page.text)
     if fixer and fixer.total_score >= threshold:
         page.text = newtext
-        summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]],'
-            + ' [[MOS:INDENTGAP|INDENTGAP]], and [[MOS:LISTGAP|LISTGAP]].'
-            + ' ({} markup adjustments, {} blank lines removed)'.format(*score)
-            + ' [[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]].')
+        summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]], '
+            + '[[MOS:INDENTGAP|INDENTGAP]], and [[MOS:LISTGAP|LISTGAP]]. '
+            + '({} markup adjustments, {} blank lines removed) '.format(*score)
+            + '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]].')
         try:
             page.save(summary=summary,
                       minor=False,
@@ -111,7 +111,7 @@ def fix_page(page, fixer, threshold):
             return pat.diff_template(page)
 
 
-def main(chunk, delay, limit, threshold, verbose):
+def mainloop(chunk, delay, limit, threshold, verbose):
     """
     Keep in mind the parameters for each fix being used.
     In particular, for the GapFix class,
@@ -147,7 +147,7 @@ def run():
     set_up_logging(logfile=args.logfile)
     pat.set_status_page('active')
     try:
-        main(chunk=args.chunk,
+        mainloop(chunk=args.chunk,
              delay=args.delay,
              limit=args.total,
              threshold=args.threshold,

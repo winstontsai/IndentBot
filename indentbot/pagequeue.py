@@ -15,6 +15,7 @@ import regex as re
 
 from pywikibot import Page, Site, User
 from pywikibot.exceptions import *
+from pywikibot.pagegenerators import PreloadingGenerator
 
 import patterns as pat
 
@@ -29,7 +30,6 @@ SITE.login(user='IndentBot')
 PAUSED = False
 
 ################################################################################
-
 class PageQueue:
     def __init__(self):
         self._pq = []
@@ -55,6 +55,10 @@ class PageQueue:
         self._entry_finder[title] = entry
         heapq.heappush(self._pq, entry)
         self._len += 1
+
+    def add_from(self, it):
+        for page in it:
+            self.add_page(page)
 
     def pop_page(self):
         while self._pq:
@@ -84,6 +88,42 @@ class PageQueue:
                         yield self.pop_page()
 
 
+def recent_changes_generator(start, end):
+    """
+    Yield recent changes between the timestamps start and end, inclusive,
+    with the potential to be edited by IndentBot.
+    """
+    logger.info('Checking edits from {} to {}.'.format(start, end))
+    for change in SITE.recentchanges(
+            start=start, end=end, reverse=True,
+            changetype='edit', namespaces=pat.NAMESPACES,
+            minor=False, bot=False, redirect=False):
+        if change['newlen'] - change['oldlen'] < 100:
+            continue
+        if title_filter(change['title']):
+            continue
+        yield change
+
+
+def potential_page_generator(changes):
+    """
+    Converts a generator of recent changes to a generator of Page objects
+    which have the potential to be edited by IndentBot.
+
+    We use a PreloadingGenerator to reduce the number of API calls.
+    """
+    page_dict = {} # map titles to a set of timestamps
+    for c in changes:
+        page_dict.setdefault(c['title'], set()).add(c['timestamp'])
+    for page in PreloadingGenerator(Page(SITE, title) for title in page_dict):
+        title, text = page.title(), page.text
+        if page.isTalkPage() or has_n_sigs(text, 5):
+            for ts in page_dict[title]:
+                if has_sig_with_timestamp(text, ts):
+                    yield page
+                    break
+
+
 def continuous_page_generator(chunk, delay):
     """
     Check recent changes in intervals of chunk minutes.
@@ -100,41 +140,16 @@ def continuous_page_generator(chunk, delay):
         cutoff = current_time - delay
         check_pause_or_resume(old_time + sec, current_time)
         if not PAUSED:
-            # get new changes
-            for page in recent_changes(old_cutoff + sec, cutoff):
-                pq.add_page(page)
-            # yield pages that have waited long enough
+            rcgen = recent_changes_generator(old_cutoff + sec, cutoff)
+            pq.add_from(potential_page_generator(rcgen))
             yield from pq.pop_up_to(cutoff)
         old_time, old_cutoff = current_time, cutoff
         time.sleep(max(0, 60*chunk - time.perf_counter() + tstart))
 
 
-def recent_changes(start, end):
-    """
-    Yield recent changes between the timestamps start and end, inclusive.
-    """
-    logger.info('Checking edits from {} to {}.'.format(start, end))
-    # page cache for this checkpoint
-    page_cache = dict()
-    yielded = set()
-    for change in SITE.recentchanges(
-            start=start, end=end, reverse=True,
-            changetype='edit', namespaces=pat.NAMESPACES,
-            minor=False, bot=False, redirect=False):
-        if change['title'] in yielded:
-            continue
-        result = should_edit(change, page_cache)
-        if result:
-            yield result
-            yielded.add(result.title())
-
 ################################################################################
 # Helper functions
 ################################################################################
-def talk_namespace(namespace_num):
-    return namespace_num % 2 == 1
-
-
 def sandbox(title):
     """
     Return True if the title looks like it belongs to a sandbox.
@@ -190,26 +205,6 @@ def has_sig_with_timestamp(text, ts):
         + ts[:4] + r' \(UTC\)'                       # yyyy
     )
     return re.search(recent_sig_pat, text)
-
-
-def should_edit(change, page_cache):
-    """
-    Return False if we should not edit based on the change.
-    Otherwise, return the appropriate Page object.
-    """
-    if change['newlen'] - change['oldlen'] < 100:
-        return False
-    title, ts = change['title'], change['timestamp']
-    if title_filter(title):
-        return False
-    if title not in page_cache:
-        page_cache[title] = Page(SITE, title)
-    text = cache[title].text
-    if not talk_namespace(change['ns']) and not has_n_sigs(text, 5):
-        return False
-    if not has_sig_with_timestamp(text, ts):
-        return False
-    return page_cache[title]
 
 
 def check_pause_or_resume(start, end):

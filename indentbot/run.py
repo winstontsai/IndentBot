@@ -33,8 +33,8 @@ def get_args():
     parser.add_argument('-t', '--total', type=int, default=float('inf'),
         help='maximum number of edits to make (default: inf)')
 
-    parser.add_argument('--threshold', type=int, default=1,
-        help='minimum total error score for an edit to be made (default: 1)')
+    parser.add_argument('--threshold', type=int, default=5,
+        help='minimum total error score for an edit to be made (default: 5)')
 
     parser.add_argument('-v', '--verbose', action='store_true',
         help='print the {{Diff2}} template for successful edits')
@@ -47,6 +47,7 @@ def set_up_logging(logfile):
     $HOME/logs/indentbot.log.
     The directory $HOME/logs will be created if it does not exist.
     """
+    logging.getLogger('pywiki').setLevel(logging.WARNING)
     logger = logging.getLogger('indentbot_logger')
     if logfile is None:
         path = Path.home() / 'logs'

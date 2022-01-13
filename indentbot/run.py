@@ -33,11 +33,20 @@ def get_args():
     parser.add_argument('-t', '--total', type=int, default=float('inf'),
         help='maximum number of edits to make (default: inf)')
 
-    parser.add_argument('--threshold', type=int, default=5,
-        help='minimum total error score for an edit to be made (default: 5)')
+    parser.add_argument('--threshold', type=int, default=1,
+        help='minimum total error score for an edit to be made (default: 1)')
 
     parser.add_argument('-v', '--verbose', action='store_true',
         help='print the {{Diff2}} template for successful edits')
+
+    # Keyword options for the fixes.
+    # gap
+    parser.add_argument('--min_closing_lvl', type=int, default=1)
+    parser.add_argument('--max_gap_length', type=int, default=1)
+    parser.add_argument('--not_monotonic', action='store_true')
+    # style
+    parser.add_argument('--hide_extra_bullets', type=int, default=1)
+    parser.add_argument('--keep_last_bullet', action='store_true')
     return parser.parse_args()
 
 
@@ -59,12 +68,11 @@ def set_up_logging(logfile):
     formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.INFO)
-
     logger.addHandler(file_handler)
     logger.setLevel(logging.INFO)
 
 
-def fix_page(page, fixer, threshold):
+def fix_page(page, fixer, *, threshold):
     """
     Apply fixes to a page and save it if there was a change in the text.
     If save is successful, returns a string for Template:Diff2.
@@ -112,7 +120,7 @@ def fix_page(page, fixer, threshold):
             return pat.diff_template(page)
 
 
-def mainloop(chunk, delay, limit, threshold, verbose):
+def mainloop(args):
     """
     Keep in mind the parameters for each fix being used.
     In particular, for the GapFix class,
@@ -123,17 +131,27 @@ def mainloop(chunk, delay, limit, threshold, verbose):
     just out of preference. However, we shouldn't compromise
     on gaps where the closing line has indent level greater than 1.
     """
+    chunk, delay, limit = args.chunk, args.delay, args.total
+    threshold = args.threshold
     logger.info(('Starting run. '
-        '(chunk={}, delay={}, limit={})').format(chunk, delay, limit))
+        '(chunk={}, delay={}, limit={}), '
+        'threshold={}').format(chunk, delay, limit, threshold))
     t1 = time.perf_counter()
-    FIXER = TF(StyleFix(1),
-               GapFix(min_closing_lvl=1, single_only=True, monotonic=True))
     count = 0
+    FIXER = TF(
+                StyleFix(
+                    hide_extra_bullets=args.hide_extra_bullets,
+                    keep_last_bullet=args.keep_last_bullet),
+                GapFix(
+                    min_closing_lvl=args.min_closing_lvl,
+                    max_gap_length=args.max_gap_length,
+                    monotonic=not args.not_monotonic)
+            )
     for p in pagequeue.continuous_page_gen(chunk, delay):
         diff = fix_page(p, FIXER, threshold=threshold)
         if diff:
             count += 1
-            if verbose:
+            if args.verbose:
                 print(diff)
         if count >= limit:
             logger.info('Limit ({}) reached.'.format(limit))

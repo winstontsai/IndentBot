@@ -13,7 +13,7 @@ from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
 # GAPS
 ################################################################################
 class GapFix:
-    def __init__(self, min_closing_lvl=2, max_gap_length=1, monotonic=True):
+    def __init__(self, *, min_closing_lvl, max_gap_length, monotonic=True):
         """
         With the most liberal settings, all gaps (sequences of blank lines)
         between two indented lines will be removed. The parameters serve
@@ -113,7 +113,7 @@ class GapFix:
 # STYLE
 ################################################################################
 class StyleFix:
-    def __init__(self, hide_extra_bullets=1, keep_last_bullet=False):
+    def __init__(self, *, hide_extra_bullets, keep_last_bullet):
         """
         The parameter hide_extra_bullets determines how "floating"
         bullets that occur inside an abnormal level increase are treated.

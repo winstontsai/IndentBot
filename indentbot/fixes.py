@@ -13,7 +13,7 @@ from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
 # GAPS
 ################################################################################
 class GapFix:
-    def __init__(self, *, min_closing_lvl, max_gap_length, monotonic=True):
+    def __init__(self, *, min_closing_lvl, max_gap_length, monotonic):
         """
         With the most liberal settings, all gaps (sequences of blank lines)
         between two indented lines will be removed. The parameters serve

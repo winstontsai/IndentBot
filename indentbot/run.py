@@ -1,6 +1,5 @@
 import argparse
 import logging
-import sys
 import time
 
 from pathlib import Path
@@ -11,7 +10,7 @@ from pywikibot.exceptions import *
 import pagequeue
 import patterns as pat
 
-from fixes import *
+from fixes import GapFix, StyleFix
 from textfixer import TF
 
 ################################################################################
@@ -41,12 +40,16 @@ def get_args():
 
     # Keyword options for the fixes.
     # gap
-    parser.add_argument('--min_closing_lvl', type=int, default=1)
-    parser.add_argument('--max_gap_length', type=int, default=1)
-    parser.add_argument('--not_monotonic', action='store_true')
+    parser.add_argument('--min_closing_lvl', type=int, default=1,
+        help='minimum level of the closing line of a gap to be removed')
+    parser.add_argument('--max_gap_length', type=int, default=1,
+        help='maximum length of a gap to be removed')
     # style
-    parser.add_argument('--hide_extra_bullets', type=int, default=1)
-    parser.add_argument('--keep_last_bullet', action='store_true')
+    parser.add_argument('--hide_extra_bullets', type=int, default=1,
+        help='determines how floating bullets inside an abnormal level increase '
+        'are treated. For more info, see the docstring for StyleFix.')
+    parser.add_argument('--keep_last_bullet', action='store_true',
+        help='always keeps the rightmost asterisk')
     return parser.parse_args()
 
 
@@ -134,8 +137,8 @@ def mainloop(args):
     chunk, delay, limit = args.chunk, args.delay, args.total
     threshold = args.threshold
     logger.info(('Starting run. '
-        '(chunk={}, delay={}, limit={}), '
-        'threshold={}').format(chunk, delay, limit, threshold))
+        '(chunk={}, delay={}, limit={}, '
+        'threshold={})').format(chunk, delay, limit, threshold))
     t1 = time.perf_counter()
     count = 0
     FIXER = TF(
@@ -145,7 +148,7 @@ def mainloop(args):
                 GapFix(
                     min_closing_lvl=args.min_closing_lvl,
                     max_gap_length=args.max_gap_length,
-                    monotonic=not args.not_monotonic)
+                    monotonic=True)
             )
     for p in pagequeue.continuous_page_gen(chunk, delay):
         diff = fix_page(p, FIXER, threshold=threshold)
@@ -167,10 +170,10 @@ def run():
     pat.set_status_page('active')
     try:
         mainloop(chunk=args.chunk,
-             delay=args.delay,
-             limit=args.total,
-             threshold=args.threshold,
-             verbose=args.verbose)
+                 delay=args.delay,
+                 limit=args.total,
+                 threshold=args.threshold,
+                 verbose=args.verbose)
     except BaseException as e:
         logger.error('Ending run due to {}.'.format(type(e).__name__))
         raise

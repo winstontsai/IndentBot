@@ -7,7 +7,8 @@ class TF:
     def __init__(self, *fixes, text=None):
         """
         fixes should be callables taking one parameter, the text to be fix,
-        and returning a 2-tuple consisting of fixed text and a numeric score.
+        and returning a 2-tuple consisting of fixed text and a
+        nonnegative numeric score.
         It is up to the callable what the score represents, but ideally it
         reoresents the "amount" of fixing that's been done by the callable.
         Optionally, the text parameter can be provided to immediately fix
@@ -27,21 +28,16 @@ class TF:
 
     def fix(self, text):
         self._original_text = text
-        score = []
-        changed = False
-        for f in self.fixes:
-            text, s = f(text)
-            if s:
-                changed = True
-            score.append(s)
-
-        while changed:
+        score = [0] * len(self.fixes)
+        while True:
             changed = False
             for i, f in enumerate(self.fixes):
                 text, s = f(text)
                 if s:
+                    score[i] += s
                     changed = True
-                score[i] += s
+            if not changed:
+                break
         score = tuple(score)
         self._text, self._score = text, score
         return text, score
@@ -91,11 +87,11 @@ class TF:
     
 
     @property
-    def normalized_score(self, chunksize=10000):
+    def normalized_score(self, n=10000):
         """
         Represents the average total error score of a
-        chunk of chunksize characters.
+        chunk of n characters.
         """
-        return round(chunksize*self.total_score/len(self.original_text), 2)
+        return round(n * self.total_score / len(self.original_text), 2)
 
 

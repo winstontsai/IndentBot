@@ -112,13 +112,13 @@ def potential_page_gen(changes):
 
     We use a PreloadingGenerator to reduce the number of API calls.
     """
-    page_dict = {} # map titles to a set of timestamps
+    pdict = {} # map titles to a set of timestamps
     for c in changes:
-        page_dict.setdefault(c['title'], set()).add(c['timestamp'])
-    for page in PreloadingGenerator(Page(SITE, title) for title in page_dict):
+        pdict.setdefault(c['title'], set()).add(c['timestamp'])
+    for page in PreloadingGenerator(Page(SITE, title) for title in pdict):
         title, text = page.title(), page.text
         if page.isTalkPage() or has_n_sigs(text, 5):
-            for ts in page_dict[title]:
+            for ts in pdict[title]:
                 if has_sig_with_timestamp(text, ts):
                     yield page
                     break
@@ -135,11 +135,10 @@ def continuous_page_gen(chunk, delay):
     tstart = time.perf_counter()
     old_time = SITE.server_time()
     cutoff = old_time - delay
-    pq.add_from(
-        potential_page_gen(
-            recent_changes_gen(cutoff - timedelta(minutes=chunk), old_time)))
-    yield from pq.pop_up_to(cutoff)
+    rcgen = recent_changes_gen(cutoff - timedelta(minutes=chunk), old_time)
+    pq.add_from(potential_page_gen(rcgen))
     last_load = old_time
+    yield from pq.pop_up_to(cutoff)
     while True:
         time.sleep(max(0, 60*chunk - time.perf_counter() + tstart))
         tstart = time.perf_counter()
@@ -153,7 +152,7 @@ def continuous_page_gen(chunk, delay):
                 last_load = current_time
             yield from pq.pop_up_to(cutoff)
         old_time = current_time
-        
+
 
 ################################################################################
 # Helper functions

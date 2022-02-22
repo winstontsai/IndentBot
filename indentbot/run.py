@@ -147,8 +147,7 @@ def mainloop(args):
                     keep_last_bullet=args.keep_last_bullet),
                 GapFix(
                     min_closing_lvl=args.min_closing_lvl,
-                    max_gap_length=args.max_gap_length,
-                    monotonic=True)
+                    max_gap_length=args.max_gap_length)
             )
     for p in pagequeue.continuous_page_gen(chunk, delay):
         diff = fix_page(p, FIXER, threshold=threshold)

@@ -1,12 +1,12 @@
 """
 This module defines functions to fix some text.
 """
-import datetime
 import regex as re
 import wikitextparser as wtp
 
-from pagequeue import SITE
+from datetime import datetime
 
+from pagequeue import SITE
 from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
                       SIGNATURE_PATTERN)
 
@@ -14,7 +14,7 @@ from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
 # GAPS
 ################################################################################
 class GapFix:
-    def __init__(self, *, min_closing_lvl, max_gap_length, monotonic):
+    def __init__(self, *, min_closing_lvl, max_gap_length, monotonic=True):
         """
         With the most liberal settings, all gaps (sequences of blank lines)
         between two indented lines will be removed. The parameters serve
@@ -136,6 +136,9 @@ class StyleFix:
         would have the same behavior and both the second and third bullets
         of Comment 2 would be removed. This is because the rightmost bullet
         would be the final indent character, which is always preserved.
+
+        The parameter keep_last_bullet, if True, results in the last '*' of
+        an indent always being preserved.
         """
         if hide_extra_bullets not in range(3):
             raise ValueError('hide_extra_bullets should be in range(3)')
@@ -368,7 +371,7 @@ def expand_list(l, title=None):
     """
     if not l:
         return []
-    DELIMITER = 'INDENTBOTDELIMITERat' + str(datetime.datetime.utcnow())
+    DELIMITER = 'INDENTBOTDELIMITERat' + str(datetime.utcnow())
     z = DELIMITER.join(l)
     z = SITE.expand_text(z, title=title, includecomments=False)
     return z.split(DELIMITER)

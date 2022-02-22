@@ -1,6 +1,7 @@
 """
 This module defines functions to fix some text.
 """
+import datetime
 import regex as re
 import wikitextparser as wtp
 
@@ -367,11 +368,10 @@ def expand_list(l, title=None):
     """
     if not l:
         return []
-    DELIMITER = '\nzaaaaaINDENTBOT DELIMITERaaaaaaz\n'
+    DELIMITER = 'INDENTBOTDELIMITERat' + str(datetime.datetime.utcnow())
     z = DELIMITER.join(l)
     z = SITE.expand_text(z, title=title, includecomments=False)
-    z = z.split(DELIMITER)
-    return [z[i] for i in range(len(l))]
+    return z.split(DELIMITER)
 
 def begins_with_table(lines):
     """
@@ -379,7 +379,7 @@ def begins_with_table(lines):
     and begin with a table either using "{|" directly or through a template.
     Does not check for <table> html tags.
     """
-    answer = set()
+    result = set()
     expand_indices = []
     expand_lines = []
     for i, line in enumerate(lines):
@@ -387,11 +387,10 @@ def begins_with_table(lines):
         if lvl:
             expand_indices.append(i)
             expand_lines.append(line[lvl:])
-    expand_lines = expand_list(expand_lines)
-    for ind, eline in zip(expand_indices, expand_lines):
-        if eline.lstrip().startswith('{|'):
-            answer.add(ind)
-    return answer
+    for ind, eline in zip(expand_indices, expand_list(expand_lines)):
+        if eline.lstrip('\n').startswith('{|'):
+            result.add(ind)
+    return result
 
 
 if __name__ == "__main__":

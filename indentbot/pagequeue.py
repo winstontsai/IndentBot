@@ -94,9 +94,17 @@ def recent_changes_gen(start, end):
     with the potential to be edited by IndentBot.
     """
     logger.info('Checking edits from {} to {}.'.format(start, end))
+    # Talk, Wikipedia talk, File talk, Mediawiki talk,
+    # Template talk, Help talk, Category talk, Portal talk, Draft talk,
+    # TimedText talk, Module talk namespaces
+    # NOTE: User talk namespace (3) is currently avoided.
+    TALK_SPACES = (1, 5, 7, 11, 13, 15, 101, 119, 711, 829)
+    # Wikipedia, Template namespaces
+    OTHER_SPACES = (4, 10)
+    NAMESPACES = TALK_SPACES + OTHER_SPACES
     for change in SITE.recentchanges(
             start=start, end=end, reverse=True,
-            changetype='edit', namespaces=pat.NAMESPACES,
+            changetype='edit', namespaces=NAMESPACES,
             minor=False, bot=False, redirect=False):
         if change['newlen'] - change['oldlen'] < 100:
             continue
@@ -161,7 +169,15 @@ def sandbox(title):
     """
     Return True if the title looks like it belongs to a sandbox.
     """
-    if title in pat.SANDBOXES:
+    SANDBOXES = frozenset([
+        'Wikipedia:Sandbox',
+        'Wikipedia talk:Sandbox',
+        'Wikipedia:Articles for creation/AFC sandbox',
+        'User talk:Sandbox',
+        'User talk:Sandbox for user warnings',
+        'User:Sandbox',
+    ])
+    if title in SANDBOXES:
         return True
     return bool(re.search(r'/sandbox(?: ?\d+)?(?:/|\Z)', title, flags=re.I))
 
@@ -176,13 +192,14 @@ def valid_template_page(title):
 
 def title_filter(title):
     """
-    Returns True iff a page should NOT be edited based on its title only.
+    Returns True iff a page should NOT be edited based only on its title.
     """
     if sandbox(title):
         return True
     if title.startswith('Template:') and not valid_template_page(title):
         return True
-    if any(title.startswith(x) for x in pat.BAD_TITLE_PREFIXES):
+    BAD_TITLE_PREFIXES = frozenset(['Wikipedia:Arbitration/Requests/',])
+    if any(title.startswith(x) for x in BAD_TITLE_PREFIXES):
         return True
     return False
 
@@ -223,11 +240,11 @@ def check_pause_or_resume(start, end):
     global PAUSED
     page = Page(SITE, 'User talk:IndentBot')
     for rev in page.revisions(starttime=start, endtime=end, reverse=True):
-        user = rev['user']
+        user   = rev['user']
         groups = User(SITE, user).groups()
-        cmt = rev.get('comment', '')
-        revid = rev.revid
-        ts = rev.timestamp.isoformat()
+        cmt    = rev.get('comment', '')
+        revid  = rev.revid
+        ts     = rev.timestamp.isoformat()
         if user in pat.MAINTAINERS or 'sysop' in groups:
             can_stop, can_resume = True, True
         elif 'autoconfirmed' in groups:

@@ -84,27 +84,6 @@ SIGNATURE_PATTERN = (
     r'(2\d{3}) \(UTC\)'                                 # yyyy
 )
 
-# Talk, Wikipedia talk, File talk, Mediawiki talk,
-# Template talk, Help talk, Category talk, Portal talk, Draft talk,
-# TimedText talk, Module talk.
-# NOTE: User talk (3) is currently not included.
-TALK_SPACES = (1, 5, 7, 11, 13, 15, 101, 119, 711, 829)
-OTHER_SPACES = (4, 10)
-# Wikipedia, Template
-NAMESPACES = TALK_SPACES + OTHER_SPACES
-
-# BAD_PREFIXES = ('Wikipedia:Templates for discussion/', )
-BAD_TITLE_PREFIXES = frozenset(['Wikipedia:Arbitration/Requests/',])
-
-SANDBOXES = frozenset([
-    'Wikipedia:Sandbox',
-    'Wikipedia talk:Sandbox',
-    'Wikipedia:Articles for creation/AFC sandbox',
-    'User talk:Sandbox',
-    'User talk:Sandbox for user warnings',
-    'User:Sandbox',
-])
-
 PARSER_EXTENSION_TAGS = frozenset(['gallery', 'includeonly', 'noinclude',
     'nowiki', 'onlyinclude', 'pre',
     'categorytree', 'charinsert', 'chem', 'ce', 'graph', 'hiero', 'imagemap',

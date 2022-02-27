@@ -7,8 +7,7 @@ import wikitextparser as wtp
 from datetime import datetime
 
 from pagequeue import SITE
-from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS,
-                      SIGNATURE_PATTERN)
+from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS)
 
 ################################################################################
 # GAPS

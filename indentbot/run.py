@@ -45,7 +45,7 @@ def get_args():
     parser.add_argument('--max_gap_length', type=int, default=1,
         help='maximum length of a gap to be removed')
     # style
-    parser.add_argument('--hide_extra_bullets', type=int, default=1,
+    parser.add_argument('--hide_extra_bullets', type=int, default=0,
         help='determines how floating bullets inside an abnormal level increase '
         'are treated. For more info, see the docstring for StyleFix.')
     parser.add_argument('--keep_last_bullet', action='store_true',

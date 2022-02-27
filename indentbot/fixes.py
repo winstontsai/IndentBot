@@ -360,7 +360,8 @@ def abort_fix(line):
     # Abort if there is a wikilink containing a disallowed newline.
     wt = wtp.parse(line)
     for x in wt.wikilinks:
-        if len(line_partition(str(x).lstrip('[').rstrip(']'))) > 1:
+        s = str(x).lstrip('[').rstrip(']')
+        if s.endswith('\n') or len(line_partition(s)) > 1:
             return True
     return False
 

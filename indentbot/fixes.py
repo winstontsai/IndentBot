@@ -94,7 +94,10 @@ class GapFix:
         Opening is the opening line's indent characters.
         Closing is the closing line's indent characters.
         Gaplen is the length of the gap under consideration.
+
         Returns True if and only if the gap should be removed.
+        In general, we try not to close gaps if there is no possibility
+        for the closing line to improve its indent.
         """
         len1, len2 = len(opening), len(closing)
         if gaplen < 1 or gaplen > self.max_gap:
@@ -103,12 +106,14 @@ class GapFix:
             return False
         if self.allow_reset and len2 == 1 < len1:
             return False
-        # Don't remove gaps where the numbering can change.
         if -1 != closing.find('#') == opening.find('#'):
+            # Prevents numbering change
             return False
-        # Never remove gap if the sole indent character of the closing
-        # line is unequal to the opening's first character.
-        if len2 == 1 and closing != opening[0]:
+        # The following conditions prevent some gaps from being closed
+        # when there is no hope of the closing line's indent being changed.
+        if closing[0] == '#' != opening[0]:
+            return False
+        if len2 == 1 and closing[0] != opening[0]:
             return False
         return True
 
@@ -211,6 +216,10 @@ class StyleFix:
                 new_indent += c1
             p1 += 1
             p2 += 1
+            # Once out-of-sync, no reason to continue matching
+            if new_indent[-1] != c1:
+                break
+
         if self.hide_extra_bullets == 2:
             for j in range(p2, lvl):
                 new_indent += ':' if indent2[j] == '*' else indent2[j]

@@ -103,9 +103,6 @@ Some stuff</tag>
 If NO, then we shouldn't split on newlines inside them.
 If YES, then we SHOULD split on newlines inside them
 
-HOWEVER: For all things (templates, tags, tables), we should not split
-on newlines immediately preceding them FOR FIX_LEVELS ONLY.
-
 NEWLINES IN THESE THINGS DO NOT BREAK LISTS:
 comments, templates, gallery, includeonly, nowiki, categorytree, chem, ce,
 graph, heiro, imagemap, indicator, inputbox, mapframe, maplink, math,

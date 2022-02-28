@@ -125,11 +125,10 @@ def potential_page_gen(changes):
         pdict.setdefault(c['title'], set()).add(c['timestamp'])
     for page in PreloadingGenerator(Page(SITE, title) for title in pdict):
         title, text = page.title(), page.text
-        if page.isTalkPage() or has_n_sigs(text, 5):
-            for ts in pdict[title]:
-                if has_sig_with_timestamp(text, ts):
-                    yield page
-                    break
+        if not (page.isTalkPage() or has_n_sigs(text, 5)):
+            continue
+        if any(has_sig_with_timestamp(text, ts) for ts in pdict[title]):
+            yield page
 
 
 def continuous_page_gen(chunk, delay):

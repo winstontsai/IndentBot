@@ -13,9 +13,9 @@ from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS)
 # GAPS
 ################################################################################
 class GapFix:
-    def __init__(self, *, min_closing_lvl, max_gap_length, monotonic=True):
+    def __init__(self, *, min_closing_lvl=1, max_gap=1, allow_reset=True):
         """
-        With the most liberal settings, all gaps (sequences of blank lines)
+        With the most liberal settings, essentially all gaps
         between two indented lines will be removed. The parameters serve
         to prevent certain gaps from being removed.
 
@@ -32,20 +32,20 @@ class GapFix:
             : Comment 2
         will not be removed.
 
-        A gap with length greater than max_gap_length will not be removed.
+        A gap with length greater than max_gap will not be removed.
 
-        The parameter monotonic, if True, means that a gap between an opening
+        The parameter allow_reset, if True, means that a gap between an opening
         line with level > 1 and a closing line with level == 1 will not be
-        removed. (monotonic is somewhat of a misnomer)
+        removed.
         Note that if min_closing_lvl >= 2, then the value of the parameter
-        monotonic is irrelevant and it will effectively be True since gaps with
-        closing line having level == 1 will not be removed.
+        allow_reset is irrelevant and it will effectively be True since
+        gaps with closing line having level == 1 will not be removed.
         """
         if min_closing_lvl < 1:
             raise ValueError('min_closing_lvl should be a positive integer')
         self.min_closing_lvl = min_closing_lvl
-        self.max_gap_length = max_gap_length
-        self.monotonic = bool(monotonic)
+        self.max_gap = max_gap
+        self.allow_reset = bool(allow_reset)
 
     def __call__(self, text):
         lines, score = self._remove_indented_and_blank(line_partition(text))
@@ -97,11 +97,11 @@ class GapFix:
         Returns True if and only if the gap should be removed.
         """
         len1, len2 = len(opening), len(closing)
-        if gaplen < 1 or gaplen > self.max_gap_length:
+        if gaplen < 1 or gaplen > self.max_gap:
             return False
         if len2 < self.min_closing_lvl:
             return False
-        if self.monotonic and len2 == 1 < len1:
+        if self.allow_reset and len2 == 1 < len1:
             return False
         if len2 == 1 and closing != opening[0]:
             # never remove gap if the sole indent character of the closing
@@ -113,10 +113,10 @@ class GapFix:
 # STYLE
 ################################################################################
 class StyleFix:
-    def __init__(self, *, hide_extra_bullets, keep_last_bullet):
+    def __init__(self, *, hide_extra_bullets=0, keep_last_asterisk=False):
         """
         The parameter hide_extra_bullets determines how "floating"
-        bullets that occur inside an abnormal level increase are treated.
+        bullets that occur inside an overindentation are treated.
         Example:
             * Comment 1.
             ***: Comment 2.
@@ -136,17 +136,17 @@ class StyleFix:
         of Comment 2 would be removed. This is because the rightmost bullet
         would be the final indent character, which is always preserved.
 
-        The parameter keep_last_bullet, if True, results in the last '*' of
+        The parameter keep_last_asterisk, if True, results in the last '*' of
         an indent always being preserved.
         """
         if hide_extra_bullets not in range(3):
             raise ValueError('hide_extra_bullets should be in range(3)')
-        if hide_extra_bullets == 2 and keep_last_bullet:
+        if hide_extra_bullets == 2 and keep_last_asterisk:
             raise ValueError(('cannot have both hide_extra_bullets == 2'
-                              ' and keep_last_bullet is True'))
+                              ' and keep_last_asterisk is True'))
 
         self.hide_extra_bullets = hide_extra_bullets
-        self.keep_last_bullet = bool(keep_last_bullet)
+        self.keep_last_asterisk = bool(keep_last_asterisk)
 
     def __call__(self, text):
         lines, score = line_partition(text), 0
@@ -159,7 +159,7 @@ class StyleFix:
                 new_lines.append(line)
                 prev_lvl, prev_indent = 0, ''
                 continue
-            if abort_fix(line):
+            if abort_style_fix(line):
                 return text, 0
 
             if i in table_indices:
@@ -188,16 +188,16 @@ class StyleFix:
         p1, p2 = 0, 0
         lvl = len(indent2)
         minlvl = min(len(prev_indent), lvl)
-        last_bullet_i = indent2.rfind('*')
+        last_asterisk = indent2.rfind('*')
         while p1 < minlvl and p2 < lvl:
             c1, c2 = prev_indent[p1], indent2[p2]
-            if self.keep_last_bullet and p2 == last_bullet_i:
+            if self.keep_last_asterisk and p2 == last_asterisk:
                 new_indent += '*'
             elif c2 == '#':
                 new_indent += c2
             elif c1 == '#':
                 if (p2 < lvl - 2 and indent2[p2+1] != '#' and not
-                    (self.keep_last_bullet and p2 + 1 == last_bullet_i)):
+                    (self.keep_last_asterisk and p2 + 1 == last_asterisk)):
                     # can replace next two chars with '#' while keeping
                     # same indent level
                     new_indent += '#'
@@ -213,7 +213,7 @@ class StyleFix:
                 new_indent += ':' if indent2[j] == '*' else indent2[j]
         elif self.hide_extra_bullets == 1:
             for j in range(p2, lvl):
-                if j == last_bullet_i:
+                if j == last_asterisk:
                     new_indent += '*'
                 else:
                     new_indent += ':' if indent2[j] == '*' else indent2[j]
@@ -274,7 +274,9 @@ def line_partition(text):
             open_bracket = text.rindex('<', 0, j)
             bad_indices.update(find_all(text, '\n', open_bracket, j))
 
-    # newline followed by line consisting of spaces and comments ONLY
+    # A line consisting only of 1+ comments and optionally extra spaces
+    # should be treated as part of the preceding line.
+    # So we don't split on the '\n' immediately preceding such a line.
     for m in re.finditer(
             r'\n *{}( |{})*(?=\n)'.format(COMMENT_RE, COMMENT_RE),
             text, flags=re.S):
@@ -290,11 +292,11 @@ def line_partition(text):
     prev, lines = 0, []
     for i in find_all(text, '\n'):
         if i not in bad_indices:
-            lines.append(text[prev:i + 1])
+            lines.append(text[prev : i+1])
             prev = i + 1
-    # Wikipedia strips newlines from the end, so add final line.
-    # Even if text does have newline at the end, this is harmless since it
-    # just adds an empty string.
+    # Wikipedia strips newlines from the end, so we must explicitly
+    # append the final line.
+    # If text does have a newline at the end, this just appends an empty string.
     lines.append(text[prev:])
     return lines
 
@@ -351,7 +353,7 @@ def has_list_breaking_newline(line):
             return True
     return False
 
-def abort_fix(line):
+def abort_style_fix(line):
     """
     Last resort for difficult edge cases. In these cases,
     just don't apply the fix.

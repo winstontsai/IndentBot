@@ -3,8 +3,8 @@ This module defines the TextFixer class which takes wikitext and
 makes available the fixed wikitext, along with an error "score", as attributes.
 """
 ################################################################################
-class TF:
-    def __init__(self, *fixes, text=None):
+class TextFixer:
+    def __init__(self, *fixes):
         """
         fixes should be callables taking one parameter, the text to be fix,
         and returning a 2-tuple consisting of fixed text and a
@@ -19,14 +19,10 @@ class TF:
         if any(not callable(f) for f in fixes):
             raise TypeError('all fixes must be callable')
         self._fixes = fixes
-        if text is not None:
-            self.fix(text)
-        else:
-            self._score = tuple()
-            self._text = None
-            self._original_text = None
+        self._fix_count = 0
 
     def fix(self, text):
+        self._fix_count += 1
         self._original_text = text
         score = [0] * len(self.fixes)
         while True:
@@ -41,6 +37,9 @@ class TF:
         score = tuple(score)
         self._text, self._score = text, score
         return text, score
+
+    def _fixed(self):
+        return self._fix_count != 0
 
     def __str__(self):
         return self._text
@@ -57,41 +56,40 @@ class TF:
         self._fixes = fixes
 
     @property
-    def text(self):
-        """
-        Returns the fixed text returned by the last call to fix, or None
-        if there has not been such a call.
-        """
-        return self._text
-
-    @property
     def original_text(self):
         """
-        Returns the text supplied to the last call to fix, or None
-        if there has not been such a call.
+        Returns the text supplied to the last call to fix.
         """
+        if not self._fixed():
+            raise AttributeError("fix has not yet been called.")
         return self._original_text
+
+    @property
+    def text(self):
+        """
+        Returns the fixed text returned by the last call to fix.
+        """
+        if not self._fixed():
+            raise AttributeError("fix has not yet been called.")
+        return self._text
 
     @property
     def score(self):
         """
-        Returns a tuple of the scores returned by each fix, based on the
-        last call to fix. If there has not been such a call, an empty
-        tuple is returned.
+        Returns the score tuple returned by the last call to fix.
         """
+        if not self._fixed():
+            raise AttributeError("fix has not yet been called.")
         return self._score
 
     @property
     def total_score(self):
         return sum(self.score)
-    
 
     @property
-    def normalized_score(self, n=10000):
+    def normalized_score(self):
         """
-        Represents the average total error score of a
-        chunk of n characters.
+        Returns the total score divided by the length of the original text.
         """
-        return round(n * self.total_score / len(self.original_text), 2)
-
+        return self.total_score / len(self.original_text)
 

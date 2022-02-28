@@ -42,13 +42,13 @@ def get_args():
     # gap
     parser.add_argument('--min_closing_lvl', type=int, default=1,
         help='minimum level of the closing line of a gap to be removed')
-    parser.add_argument('--max_gap_length', type=int, default=1,
+    parser.add_argument('--max_gap', type=int, default=1,
         help='maximum length of a gap to be removed')
     # style
     parser.add_argument('--hide_extra_bullets', type=int, default=0,
-        help='determines how floating bullets inside an abnormal level increase '
+        help='determines how floating bullets inside an overindentation '
         'are treated. For more info, see the docstring for StyleFix.')
-    parser.add_argument('--keep_last_bullet', action='store_true',
+    parser.add_argument('--keep_last_asterisk', action='store_true',
         help='always keeps the rightmost asterisk')
     return parser.parse_args()
 
@@ -83,7 +83,7 @@ def fix_page(page, fixer, *, threshold):
     """
     title, title_link = page.title(), page.title(as_link=True)
     newtext, score = fixer.fix(page.text)
-    if fixer and fixer.total_score >= threshold:
+    if fixer.total_score >= threshold:
         page.text = newtext
         summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]], '
             + '[[MOS:INDENTGAP|INDENTGAP]], and [[MOS:LISTGAP|LISTGAP]]. '
@@ -141,13 +141,13 @@ def mainloop(args):
         'threshold={})').format(chunk, delay, limit, threshold))
     t1 = time.perf_counter()
     count = 0
-    FIXER = TF(
+    FIXER = TextFixer(
                 StyleFix(
                     hide_extra_bullets=args.hide_extra_bullets,
-                    keep_last_bullet=args.keep_last_bullet),
+                    keep_last_asterisk=args.keep_last_asterisk),
                 GapFix(
                     min_closing_lvl=args.min_closing_lvl,
-                    max_gap_length=args.max_gap_length)
+                    max_gap=args.max_gap)
             )
     for p in pagequeue.continuous_page_gen(chunk, delay):
         diff = fix_page(p, FIXER, threshold=threshold)

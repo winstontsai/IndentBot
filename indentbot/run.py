@@ -44,6 +44,9 @@ def get_args():
         help='minimum level of the closing line of a gap to be removed')
     parser.add_argument('--max_gap', type=int, default=1,
         help='maximum length of a gap to be removed')
+    parser.add_argument('--allow_reset', action='store_true',
+        help='allow gaps between a line with level>1 and a line with lvl=1')
+
     # style
     parser.add_argument('--hide_extra_bullets', type=int, default=0,
         help='determines how floating bullets inside an overindentation '
@@ -144,7 +147,8 @@ def mainloop(args):
     FIXER = TextFixer(
                 StyleFix(
                     hide_extra_bullets=args.hide_extra_bullets,
-                    keep_last_asterisk=args.keep_last_asterisk),
+                    keep_last_asterisk=args.keep_last_asterisk,
+                    allow_reset=args.allow_reset),
                 GapFix(
                     min_closing_lvl=args.min_closing_lvl,
                     max_gap=args.max_gap)

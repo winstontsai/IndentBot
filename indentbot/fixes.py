@@ -13,7 +13,7 @@ from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS)
 # GAPS
 ################################################################################
 class GapFix:
-    def __init__(self, *, min_closing_lvl=1, max_gap=1, allow_reset=True):
+    def __init__(self, *, min_closing_lvl=1, max_gap=1, allow_reset=False):
         """
         With the most liberal settings, essentially all gaps
         between two indented lines will be removed. The parameters serve
@@ -103,9 +103,12 @@ class GapFix:
             return False
         if self.allow_reset and len2 == 1 < len1:
             return False
+        # Don't remove gaps where the numbering can change.
+        if -1 != closing.find('#') == opening.find('#'):
+            return False
+        # Never remove gap if the sole indent character of the closing
+        # line is unequal to the opening's first character.
         if len2 == 1 and closing != opening[0]:
-            # never remove gap if the sole indent character of the closing
-            # line does not match the opening line's first character.
             return False
         return True
 

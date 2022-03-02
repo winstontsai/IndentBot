@@ -109,7 +109,7 @@ def fix_page(page, fixer, *, threshold):
             logging.warning(
                 'Edit to {} prevented by spam blacklist.'.format(title_link))
         except OtherPageSaveError as err:
-            if err.reason.startswith('Editing restricted by {{bots}}'):
+            if err.args.startswith('Editing restricted by {{bots}}'):
                 logger.warning(
                     'Edit to {} prevented by {{{{bots}}}}.'.format(title_link))
             else:

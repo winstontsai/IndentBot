@@ -517,7 +517,7 @@ def begins_with_table(lines):
     and begin with a table either using "{|" directly or through a template.
     Does not check for <table> html tags.
     """
-    return set() # TESTING TESTING TESTING REMOVE THIS LATER
+    # return set()
     result = set()
     expand_indices = []
     expand_lines = []

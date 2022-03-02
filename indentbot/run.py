@@ -11,7 +11,7 @@ import pagequeue
 import patterns as pat
 
 from fixes import GapFix, StyleFix
-from textfixer import TF
+from textfixer import TextFixer
 
 ################################################################################
 
@@ -144,7 +144,7 @@ def mainloop(args):
         'threshold={})').format(chunk, delay, limit, threshold))
     t1 = time.perf_counter()
     count = 0
-    FIXER = TextFixer(
+    FIXER = TextFixer([
                 StyleFix(
                     hide_extra_bullets=args.hide_extra_bullets,
                     keep_last_asterisk=args.keep_last_asterisk,
@@ -152,7 +152,7 @@ def mainloop(args):
                 GapFix(
                     min_closing_lvl=args.min_closing_lvl,
                     max_gap=args.max_gap)
-            )
+            ])
     for p in pagequeue.continuous_page_gen(chunk, delay):
         diff = fix_page(p, FIXER, threshold=threshold)
         if diff:

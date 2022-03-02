@@ -79,17 +79,21 @@ class GapFix:
         removed.
         """
         score = 0
-        for i in range(1, len(lines)):
-            prev_line = lines[i - 1]
-            m = re.match(r'([:*#]+) *\n?\Z', prev_line)
-            # If level doesn't increase, just leave it.
-            if not m or indent_lvl(lines[i]) <= len(m[1]):
-                continue
-            lines[i - 1] = ''
-            score += 1
+        i = len(lines) - 1
+        while i > 0:
+            lvl = indent_lvl(lines[i])
+            if lvl:
+                for i in range(i - 1, -1, -1):
+                    m = re.match(r'([:*#]+) *\n\Z', lines[i])
+                    if not m or len(m[1]) >= lvl:
+                        break
+                    lines[i] = ''
+                    score += 1
+            else:
+                i -= 1
         return [x for x in lines if x], score
 
-    def _removable_gap(self, opening, closing, gaplen):
+    def _removable_gap(self, opening, closing, glen):
         """
         Opening is the opening line's indent characters.
         Closing is the closing line's indent characters.
@@ -100,13 +104,13 @@ class GapFix:
         for the closing line to improve its indent.
         """
         len1, len2 = len(opening), len(closing)
-        if gaplen < 1 or gaplen > self.max_gap:
+        if glen < 1 or glen > self.max_gap:
             return False
         if len2 < self.min_closing_lvl:
             return False
         if self.allow_reset and len2 == 1 < len1:
             return False
-        if -1 != closing.find('#') == opening.find('#'):
+        if one_count('', closing) != one_count(opening, closing):
             # Prevents numbering change
             return False
         # The following conditions prevent some gaps from being closed
@@ -116,6 +120,7 @@ class GapFix:
         if len2 == 1 and closing[0] != opening[0]:
             return False
         return True
+
 
 ################################################################################
 # STYLE
@@ -158,6 +163,8 @@ class StyleFix:
 
     def __call__(self, text):
         lines, score = line_partition(text), 0
+        if abort_style_fix(lines):
+            return text, 0
         table_indices = begins_with_table(lines)
         new_lines = []
         prev_lvl, prev_indent = 0, ''
@@ -167,9 +174,6 @@ class StyleFix:
                 new_lines.append(line)
                 prev_lvl, prev_indent = 0, ''
                 continue
-            if abort_style_fix(line):
-                return text, 0
-
             if i in table_indices:
                 # Don't change style if starting with a table.
                 new_indent = old_indent
@@ -189,6 +193,7 @@ class StyleFix:
         Compute new indent for indent2 based on prev_indent.
         In other words, build a new indent by "matching" the indentation
         characters of the previous indent where possible.
+        Either indent may be empty.
 
         The final indentation character is never altered.
         """
@@ -232,8 +237,109 @@ class StyleFix:
         else:
             new_indent += indent2[p2:]
         # Always keep original final indent character.
-        new_indent = new_indent[:-1] + indent2[-1]
+        new_indent = new_indent[:-1] + indent2[-1:]
         return new_indent
+
+
+class CombinedFix(GapFix, StyleFix):
+    def __init__(self, *,
+            min_closing_lvl=1, max_gap=1, allow_reset=False,
+            hide_extra_bullets=0, keep_last_asterisk=False):
+        GapFix.__init__(
+            self,
+            min_closing_lvl=min_closing_lvl,
+            max_gap=max_gap,
+            allow_reset=allow_reset)
+        StyleFix.__init__(
+            self,
+            hide_extra_bullets=hide_extra_bullets,
+            keep_last_asterisk=keep_last_asterisk)
+
+    def __call__(self, text):
+        lines = line_partition(text)
+        if self._abort_fix(lines):
+            return text, 0
+        lines, score = self._remove_indented_and_blank(lines)
+        table_indices = begins_with_table(lines)
+        new_lines = [lines[0]]
+        prev_indent = indent_text(lines[0])
+        if 0 in table_indices or has_list_breaking_newline(lines[0]):
+            prev_indent = ''
+        i, n = 1, len(lines)
+        while i < n:
+            # Find next nonblank line.
+            for j in range(i, n):
+                if not is_blank_line(lines[j]):
+                    break
+            else:
+                break
+            line = lines[j]
+            txt_j, lvl_j = indent_text_lvl(line)
+
+            # Compute potentially new indent.
+            if j in table_indices:
+                # Don't change style if starting with a table.
+                new_indent = old_indent
+            else:
+                new_indent = self._match_indent(prev_indent, txt_j)
+
+            # Check whether there is a gap that should be removed
+            glen = j - i
+            if glen == 0:
+                score += new_indent != txt_j
+            elif self._removable_gap(prev_indent, txt_j, new_indent, glen):
+                score += glen + (new_indent != txt_j)
+            else:
+                new_lines += lines[i : j]
+                new_indent = txt_j
+            new_lines.append(new_indent + line[lvl_j:])
+
+            prev_indent = new_indent
+            if j in table_indices or has_list_breaking_newline(line):
+                prev_indent = ''
+            i = j + 1
+        return ''.join(new_lines), score
+
+    def _removable_gap(self, opening, oldclose, newclose, glen):
+        """
+        Returns True if and only if the gap should be removed.
+        """
+        if glen < 1:
+            raise ValueError('glen should be >= 1')
+        len1, len2 = len(opening), len(newclose)
+        # Only consider gaps between indented lines.
+        if not (len1 and len2):
+            return False
+        if opening[0] != newclose[0]:
+            return False
+        if glen > self.max_gap:
+            return False
+        if len2 < self.min_closing_lvl:
+            return False
+        if self.allow_reset and len2 == 1 < len1:
+            return False
+        # Prevent possible numbering change.
+        if one_count('', oldclose) != one_count(opening, newclose):
+            return False
+        return True
+
+    def _abort_fix(self, lines):
+        # Abort if there is a wikilink containing a disallowed newline,
+        # inside an indented line.
+        for i, line in enumerate(lines):
+            if indent_text(line):
+                wt = wtp.parse(line)
+                for x in wt.wikilinks:
+                    s = str(x).lstrip('[').rstrip(']')
+                    if s.endswith('\n') or len(line_partition(s)) > 1:
+                        return True
+        # Prevent possible numbering change.
+        for i in range(len(lines) - 1):
+            a, b = indent_text(lines[i]), indent_text(lines[i + 1])
+            c = self._match_indent(a, b)
+            if one_count(a, b) != one_count(a, c):
+                return True
+        return False
 
 
 ################################################################################
@@ -347,6 +453,15 @@ def visual_lvl(line):
     # '#' counts for two lvls visually
     return len(x) + x.count('#')
 
+def one_count(a, b):
+    """
+    Given two adjacent indents a and b, counts how many instances of
+    '1.' appear in b.
+    """
+    lena, lenb = len(a), len(b)
+    j = next((i for i in range(lenb) if i >= lena or a[i] != b[i]), lenb)
+    return b[j:].count('#')
+
 def has_list_breaking_newline(line):
     """
     Return True if line contains a "real" line break besides at the end.
@@ -365,17 +480,23 @@ def has_list_breaking_newline(line):
             return True
     return False
 
-def abort_style_fix(line):
+def abort_style_fix(lines):
     """
     Last resort for difficult edge cases. In these cases,
     just don't apply the fix.
     """
     # Abort if there is a wikilink containing a disallowed newline.
-    wt = wtp.parse(line)
-    for x in wt.wikilinks:
-        s = str(x).lstrip('[').rstrip(']')
-        if s.endswith('\n') or len(line_partition(s)) > 1:
-            return True
+    n = len(lines)
+    for i, line in enumerate(lines):
+        if not indent_text(line):
+            continue
+        if not (i + 1 < n and indent_text(lines[i + 1])):
+            continue
+        wt = wtp.parse(line)
+        for x in wt.wikilinks:
+            s = str(x).lstrip('[').rstrip(']')
+            if s.endswith('\n') or len(line_partition(s)) > 1:
+                return True
     return False
 
 def expand_list(l, title=None):
@@ -396,6 +517,7 @@ def begins_with_table(lines):
     and begin with a table either using "{|" directly or through a template.
     Does not check for <table> html tags.
     """
+    return set() # TESTING TESTING TESTING REMOVE THIS LATER
     result = set()
     expand_indices = []
     expand_lines = []
@@ -405,7 +527,7 @@ def begins_with_table(lines):
             expand_indices.append(i)
             expand_lines.append(line[lvl:])
     for ind, eline in zip(expand_indices, expand_list(expand_lines)):
-        if eline.lstrip('\n').startswith('{|'):
+        if eline.lstrip().startswith('{|'):
             result.add(ind)
     return result
 

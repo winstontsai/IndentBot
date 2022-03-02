@@ -94,9 +94,6 @@ def recent_changes_gen(start, end):
     with the potential to be edited by IndentBot.
     """
     logger.info('Checking edits from {} to {}.'.format(start, end))
-    # Talk, Wikipedia talk, File talk, Mediawiki talk,
-    # Template talk, Help talk, Category talk, Portal talk, Draft talk,
-    # TimedText talk, Module talk namespaces
     # NOTE: User talk namespace (3) is currently avoided.
     TALK_SPACES = (1, 5, 7, 11, 13, 15, 101, 119, 711, 829)
     # Wikipedia, Template namespaces

@@ -4,7 +4,7 @@ makes available the fixed wikitext, along with an error "score", as attributes.
 """
 ################################################################################
 class TextFixer:
-    def __init__(self, *fixes):
+    def __init__(self, fixes, onepass=None):
         """
         fixes should be callables taking one parameter, the text to be fix,
         and returning a 2-tuple consisting of fixed text and a
@@ -16,24 +16,34 @@ class TextFixer:
         """
         if not fixes:
             raise ValueError('no fixes provided')
-        if any(not callable(f) for f in fixes):
-            raise TypeError('all fixes must be callable')
+        if not fixes or any(not callable(f) for f in fixes):
+            raise TypeError('at least one fix must be given and all fixes must be callable')
         self._fixes = fixes
         self._fix_count = 0
+        if onepass is None:
+            self.onepass = len(fixes) == 1
+        else:
+            self.onepass = onepass
+
 
     def fix(self, text):
         self._fix_count += 1
         self._original_text = text
         score = [0] * len(self.fixes)
-        while True:
-            changed = False
+        if self.onepass:
             for i, f in enumerate(self.fixes):
                 text, s = f(text)
-                if s:
-                    score[i] += s
-                    changed = True
-            if not changed:
-                break
+                score[i] += s
+        else:
+            while True:
+                changed = False
+                for i, f in enumerate(self.fixes):
+                    text, s = f(text)
+                    if s:
+                        score[i] += s
+                        changed = True
+                if not changed:
+                    break
         score = tuple(score)
         self._text, self._score = text, score
         return text, score
@@ -92,4 +102,5 @@ class TextFixer:
         Returns the total score divided by the length of the original text.
         """
         return self.total_score / len(self.original_text)
+
 

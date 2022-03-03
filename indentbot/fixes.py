@@ -334,11 +334,13 @@ class CombinedFix(GapFix, StyleFix):
                     if s.endswith('\n') or len(line_partition(s)) > 1:
                         return True
         # Prevent possible numbering change.
-        for i in range(len(lines) - 1):
-            a, b = indent_text(lines[i]), indent_text(lines[i + 1])
+        a = indent_text(lines[0])
+        for i in range(1, len(lines)):
+            b = indent_text(lines[i])
             c = self._match_indent(a, b)
             if one_count(a, b) != one_count(a, c):
                 return True
+            a = b
         return False
 
 

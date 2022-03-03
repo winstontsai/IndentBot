@@ -58,6 +58,8 @@ def diff_template(page, label=None):
 
 
 def set_status_page(status):
+    if type(status) != str:
+        raise ValueError('status must be of type str')
     page = pwb.Page(pwb.Site('en', 'wikipedia'), 'User:IndentBot/status')
     page.text = status
     page.save(summary='Updating status: {}'.format(status),

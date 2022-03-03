@@ -20,16 +20,14 @@ from pywikibot.pagegenerators import PreloadingGenerator
 import patterns as pat
 
 ################################################################################
-
 logger = logging.getLogger('indentbot_logger')
 SITE = Site('en','wikipedia')
 SITE.login(user='IndentBot')
 
 # Certain users are allowed to stop and resume the bot.
-# When stopped, the bot continues tracking edits, but does not edit any pages.
 PAUSED = False
-
 ################################################################################
+
 class PageQueue:
     def __init__(self):
         self._pq = []

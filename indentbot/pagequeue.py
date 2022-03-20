@@ -232,6 +232,7 @@ def check_pause_or_resume(start, end):
     the bot, while only admins can resume it.
     """
     global PAUSED
+    original_status = PAUSED
     page = Page(SITE, 'User talk:IndentBot')
     for rev in page.revisions(starttime=start, endtime=end, reverse=True):
         user   = rev['user']
@@ -247,7 +248,6 @@ def check_pause_or_resume(start, end):
             continue
         if cmt.endswith('PAUSE') and not PAUSED and can_stop:
             PAUSED = True
-            pat.set_status_page('paused')
             logger.warning(
                 ("Paused by {}.\n"
                  "    Revid     = {}\n"
@@ -255,12 +255,13 @@ def check_pause_or_resume(start, end):
                  "    Comment   = {}").format(user, revid, ts, cmt))
         elif cmt.endswith('RESUME') and PAUSED and can_resume:
             PAUSED = False
-            pat.set_status_page('active')
             logger.warning(
                 ("Resumed by {}.\n"
                  "    Revid     = {}\n"
                  "    Timestamp = {}\n"
                  "    Comment   = {}").format(user, revid, ts, cmt))
+        if original_status != PAUSED:
+            pat.set_status_page('paused' if PAUSED else 'active')
 
 
 if __name__ == "__main__":

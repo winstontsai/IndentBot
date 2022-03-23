@@ -246,20 +246,16 @@ def check_pause_or_resume(start, end):
             can_stop, can_resume = True, False
         else:
             continue
+        msg = ("{} by {}.\n"
+               "    Revid     = {}\n"
+               "    Timestamp = {}\n"
+               "    Comment   = {}")
         if cmt.endswith('PAUSE') and not PAUSED and can_stop:
             PAUSED = True
-            logger.warning(
-                ("Paused by {}.\n"
-                 "    Revid     = {}\n"
-                 "    Timestamp = {}\n"
-                 "    Comment   = {}").format(user, revid, ts, cmt))
+            logger.warning(msg.format("Paused", user, revid, ts, cmt))
         elif cmt.endswith('RESUME') and PAUSED and can_resume:
             PAUSED = False
-            logger.warning(
-                ("Resumed by {}.\n"
-                 "    Revid     = {}\n"
-                 "    Timestamp = {}\n"
-                 "    Comment   = {}").format(user, revid, ts, cmt))
+            logger.warning(msg.format("Resumed", user, revid, ts, cmt))
         if original_status != PAUSED:
             pat.set_status_page('paused' if PAUSED else 'active')
 

@@ -25,7 +25,6 @@ class TextFixer:
         else:
             self.onepass = onepass
 
-
     def fix(self, text):
         self._fix_count += 1
         self._original_text = text
@@ -102,5 +101,3 @@ class TextFixer:
         Returns the total score divided by the length of the original text.
         """
         return self.total_score / len(self.original_text)
-
-

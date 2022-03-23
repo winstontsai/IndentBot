@@ -44,6 +44,7 @@ def rindex_pattern(pattern, text, start=0, end=None, flags=0):
         raise ValueError('substring not found')
     return i
 
+################################################################################
 
 def diff_template(page, label=None):
     """
@@ -76,7 +77,7 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 ################################################################################
 # Constants
 ################################################################################
-MAINTAINERS = frozenset(['IndentBot', 'Notsniwiast'])
+MAINTAINERS = frozenset(['IndentBot', 'Notacardoor'])
 
 SIGNATURE_PATTERN = (
     r'\[\[[Uu]ser(?: talk)?:[^\n]+?' +                  # user page link

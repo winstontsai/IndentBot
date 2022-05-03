@@ -8,8 +8,7 @@ import itertools
 import logging
 import time
 
-from calendar import month_name
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import regex as re
 
@@ -122,7 +121,7 @@ def potential_page_gen(changes):
         title, text = page.title(), page.text
         if not (page.isTalkPage() or has_n_sigs(text, 5)):
             continue
-        if any(has_sig_with_timestamp(text, ts) for ts in pdict[title]):
+        if any(has_sig_with_timestamp(ts, text) for ts in pdict[title]):
             yield page
 
 
@@ -210,19 +209,24 @@ def has_n_sigs(text, n):
     return False
 
 
-def has_sig_with_timestamp(text, ts):
+def has_sig_with_timestamp(ts, text):
     """
     Returns an re.Match object corresponding to a user signature with the
     timestamp given by ts. Returns None if a match is not found.
+
+    Example timestamp:
+    2022-05-02T23:37:57Z
+    Example sig:
+    [[User:ASDF|FDSA]] ([[User talk:ASDF|talk]]) 01:24, 22 March 2022 (UTC)
     """
-    recent_sig_pat = (
-        r'\[\[[Uu]ser(?: talk)?:[^\n]+?'             # user link
-        + r'{}:{}, '.format(ts[11:13], ts[14:16])    # hh:mm
-        + ts[8:10].lstrip('0') + ' '                 # day
-        + month_name[int(ts[5:7])] + ' '             # month name
-        + ts[:4] + r' \(UTC\)'                       # yyyy
-    )
-    return re.search(recent_sig_pat, text)
+    dt = datetime.fromisoformat(ts.rstrip('Z'))
+    mm = dt.strftime("%M")
+    hh = dt.strftime("%H")
+    day = dt.day
+    mon = dt.strftime("%B")
+    year = dt.strftime("%Y")
+    p = fr'\[\[[Uu]ser(?: talk)?:[^\n]+?{hh}:{mm}, {day} {mon} {year} \(UTC\)'
+    return re.search(p, text)
 
 
 def check_pause_or_resume(start, end):

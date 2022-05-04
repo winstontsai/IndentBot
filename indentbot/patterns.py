@@ -50,19 +50,14 @@ def diff_template(page, label=None):
     """
     Return a Template:Diff2 string for the given Page.
     """
-    x = '{{Diff2|' + str(page.latest_revision_id)
     if label is None:
-        x += '|' + page.title()
-    else:
-        x += '|' + label
-    return x + '}}'
+        label = page.title()
+    return f'{{{{Diff2|{page.latest_revision_id}|{label}}}}}'
 
 
 def set_status_page(status):
-    if type(status) != str:
-        raise ValueError('status must be of type str')
     page = pwb.Page(pwb.Site('en', 'wikipedia'), 'User:IndentBot/status')
-    page.text = status
+    page.text = str(status)
     page.save(summary=f'Updating status: {status}',
               minor=True,
               botflag=True,
@@ -77,9 +72,9 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 ################################################################################
 # Constants
 ################################################################################
-MAINTAINERS = frozenset(['IndentBot', 'Notacardoor'])
+MAINTAINERS = frozenset(('IndentBot', 'Notacardoor'))
 
-# Example sig:
+# Example signature:
 # [[User:ASDF|FDSA]] ([[User talk:ASDF|talk]]) 01:24, 22 March 2022 (UTC)
 SIGNATURE_PATTERN = (
     r'\[\[[Uu]ser(?: talk)?:[^\n]+?' +                  # user page link
@@ -89,14 +84,15 @@ SIGNATURE_PATTERN = (
     r'(2\d{3}) \(UTC\)'                                 # yyyy
 )
 
-PARSER_EXTENSION_TAGS = frozenset(['gallery', 'includeonly', 'noinclude',
+PARSER_EXTENSION_TAGS = frozenset((
+    'gallery', 'includeonly', 'noinclude',
     'nowiki', 'onlyinclude', 'pre',
     'categorytree', 'charinsert', 'chem', 'ce', 'graph', 'hiero', 'imagemap',
     'indicator', 'inputbox', 'langconvert', 'mapframe', 'maplink', 'math',
     'math chem',
     'poem', 'ref', 'references', 'score', 'section', 'syntaxhighlight',
     'source', 'templatedata', 'templatestyles', 'timeline'
-    ])
+    ))
 
 
 """Does a newline in this thing break a list? As determined by
@@ -113,10 +109,11 @@ comments, templates, gallery, includeonly, nowiki, categorytree, chem, ce,
 graph, heiro, imagemap, indicator, inputbox, mapframe, maplink, math,
 math chem, ref, score, syntaxhighlight, source, templatedata, 
 """
-NON_BREAKING_TAGS = frozenset(['gallery', 'includeonly', 'nowiki',
+NON_BREAKING_TAGS = frozenset((
+    'gallery', 'includeonly', 'nowiki',
     'categorytree', 'chem', 'ce', 'graph', 'hiero', 'imagemap', 'indicator',
     'inputbox', 'mapframe', 'maplink', 'math', 'math chem', 'ref', 'score',
-    'syntaxhighlight', 'source', 'templatedata'])
+    'syntaxhighlight', 'source', 'templatedata'))
 
 
 if __name__ == "__main__":

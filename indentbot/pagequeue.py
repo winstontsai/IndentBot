@@ -1,7 +1,7 @@
 """
 This module is for tracking recent changes and generating Page objects
 to be edited.
-It uses an edit-time-based priority queue.
+It uses a priority queue based on the most recent edit-time of a page.
 """
 import heapq
 import itertools
@@ -20,7 +20,7 @@ import patterns as pat
 
 ################################################################################
 logger = logging.getLogger('indentbot_logger')
-SITE = Site('en','wikipedia')
+SITE = Site('en', 'wikipedia')
 SITE.login(user='IndentBot')
 
 # Certain users are allowed to stop and resume the bot.

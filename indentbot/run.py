@@ -69,7 +69,6 @@ def set_up_logging(logfile):
         path.mkdir(exist_ok = True)
         path = path / 'indentbot.log'
         logfile = str(path)
-
     file_handler = logging.FileHandler(filename=logfile)
     formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
     file_handler.setFormatter(formatter)
@@ -80,56 +79,57 @@ def set_up_logging(logfile):
 
 def fix_page(page, fixer, *, threshold):
     """
-    Apply fixes to a page and save it if there was a change in the text.
+    Apply fixes to page's text and save it if
+    fixer.total_score >= threshold.
     If save is successful, returns a string for Template:Diff2.
     Returns None (or raises an exception) otherwise.
     """
     title, title_link = page.title(), page.title(as_link=True)
     newtext, score = fixer.fix(page.text)
-    if fixer.total_score >= threshold:
-        page.text = newtext
-        summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]], '
-            + '[[MOS:INDENTGAP|INDENTGAP]], [[MOS:LISTGAP|LISTGAP]]. '
-            + f'Total of {fixer.total_score} lines deleted or modified.')
-        try:
-            page.save(summary=summary,
-                      minor=True,
-                      botflag=True,
-                      nocreate=True,
-                      quiet=True)
-        except EditConflictError:
-            logger.warning(f'Edit conflict for {title_link}.')
-        except LockedPageError:
-            logger.warning(f'{title_link} is locked.')
-        except AbuseFilterDisallowedError:
+    if fixer.total_score < threshold:
+        return
+    page.text = newtext
+    summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]], '
+        + '[[MOS:INDENTGAP|INDENTGAP]], [[MOS:LISTGAP|LISTGAP]]. '
+        + f'Total of {fixer.total_score} lines deleted or modified.')
+    try:
+        page.save(summary=summary,
+                  minor=True,
+                  botflag=True,
+                  nocreate=True,
+                  quiet=True)
+    except EditConflictError:
+        logger.warning(f'Edit conflict for {title_link}.')
+    except LockedPageError:
+        logger.warning(f'{title_link} is locked.')
+    except AbuseFilterDisallowedError:
+        logger.warning(
+            f'Edit to {title_link} prevented by abuse filter.')
+    except SpamblacklistError:
+        logging.warning(
+            f'Edit to {title_link} prevented by spam blacklist.')
+    except OtherPageSaveError as err:
+        if err.args.startswith('Editing restricted by {{bots}}'):
             logger.warning(
-                f'Edit to {title_link} prevented by abuse filter.')
-        except SpamblacklistError:
-            logging.warning(
-                f'Edit to {title_link} prevented by spam blacklist.')
-        except OtherPageSaveError as err:
-            if err.args.startswith('Editing restricted by {{bots}}'):
-                logger.warning(
-                    f'Edit to {title_link} prevented by {{{{bots}}}}.')
-            else:
-                logger.exception(
-                    f'OtherPageSaveError for {title_link}.')
-                raise
-        except PageSaveRelatedError:
-            logger.exception(f'PageSaveRelatedError for {title_link}.')
-            raise
-        except Exception:
-            logger.exception(f'Error when saving {title_link}.')
-            raise
+                f'Edit to {title_link} prevented by {{{{bots}}}}.')
         else:
-            return pat.diff_template(page)
+            logger.exception(
+                f'OtherPageSaveError for {title_link}.')
+            raise
+    except PageSaveRelatedError:
+        logger.exception(f'PageSaveRelatedError for {title_link}.')
+        raise
+    except Exception:
+        logger.exception(f'Error when saving {title_link}.')
+        raise
+    else:
+        return pat.diff_template(page)
 
 
 def mainloop(args):
     """
     Keep in mind the parameters for each fix being used.
-    In particular, for the GapFix class,
-    a practical min_closing_lvl is either 1 or 2.
+    In particular, a practical min_closing_lvl is either 1 or 2.
     Note that 1 is better for screen readers and isn't noticeably visually
     distinct from 2, but modifying even just the wikitext may
     annoy editors leaving gaps either to organize the wikitext or
@@ -164,8 +164,8 @@ def mainloop(args):
 def run():
     args = get_args()
     set_up_logging(logfile=args.logfile)
-    pat.set_status_page('active')
     try:
+        pat.set_status_page('active')
         mainloop(chunk=args.chunk,
                  delay=args.delay,
                  limit=args.total,

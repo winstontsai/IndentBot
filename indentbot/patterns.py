@@ -56,8 +56,10 @@ def diff_template(page, label=None):
 
 
 def set_status_page(status):
+    if status not in ('active', 'paused', 'inactive'):
+        raise ValueError("status must be 'active', 'paused', or 'inactive'")
     page = pwb.Page(pwb.Site('en', 'wikipedia'), 'User:IndentBot/status')
-    page.text = str(status)
+    page.text = status
     page.save(summary=f'Updating status: {status}',
               minor=True,
               botflag=True,

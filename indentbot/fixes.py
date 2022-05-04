@@ -9,11 +9,10 @@ from datetime import datetime
 from pagequeue import SITE
 from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS)
 
-################################################################################
-# GAPS
-################################################################################
-class GapFix:
-    def __init__(self, *, min_closing_lvl=1, max_gap=1, allow_reset=False):
+class CombinedFix:
+    def __init__(self, *,
+            min_closing_lvl=1, max_gap=1, allow_reset=False,
+            hide_extra_bullets=0, keep_last_asterisk=False):
         """
         With the most liberal settings, essentially all gaps
         between two indented lines will be removed. The parameters serve
@@ -40,94 +39,7 @@ class GapFix:
         Note that if min_closing_lvl >= 2, then the value of the parameter
         allow_reset is irrelevant and it will effectively be True since
         gaps with closing line having level == 1 will not be removed.
-        """
-        if min_closing_lvl < 1:
-            raise ValueError('min_closing_lvl should be a positive integer')
-        self.min_closing_lvl = min_closing_lvl
-        self.max_gap = max_gap
-        self.allow_reset = bool(allow_reset)
 
-    def __call__(self, text):
-        lines, score = self._remove_indented_and_blank(line_partition(text))
-        i, n = 0, len(lines)
-        while i < n:
-            txt_i, lvl_i = indent_text_lvl(lines[i])
-            # don't care about non-indented lines
-            if lvl_i == 0:
-                i += 1; continue
-            # find next non-blank line
-            for j in range(i + 1, n):
-                if not is_blank_line(lines[j]):
-                    break
-            else:
-                break
-            txt_j = indent_text(lines[j])
-            if self._removable_gap(txt_i, txt_j, j - i - 1):
-                for k in range(i + 1, j):
-                    lines[k] = ''
-                    score += 1
-            i = j
-        lines = [x for x in lines if x]
-        return ''.join(lines), score
-
-    def _remove_indented_and_blank(self, lines):
-        """
-        Removes certain lines which are indented, but otherwise have no
-        content. More specifically, such lines which are followed by a line
-        with a higher indentation level are removed.
-        Returns a new list with those lines removed, and the number of lines
-        removed.
-        """
-        score = 0
-        i = len(lines) - 1
-        while i > 0:
-            lvl = indent_lvl(lines[i])
-            if lvl:
-                for i in range(i - 1, -1, -1):
-                    m = re.match(r'([:*#]+) *\n\Z', lines[i])
-                    if not m or len(m[1]) >= lvl:
-                        break
-                    lines[i] = ''
-                    score += 1
-            else:
-                i -= 1
-        return [x for x in lines if x], score
-
-    def _removable_gap(self, opening, closing, gaplen):
-        """
-        Opening is the opening line's indent characters.
-        Closing is the closing line's indent characters.
-        Gaplen is the length of the gap under consideration.
-
-        Returns True if and only if the gap should be removed.
-        In general, we try not to close gaps if there is no possibility
-        for the closing line to improve its indent.
-        """
-        len1, len2 = len(opening), len(closing)
-        if gaplen < 1 or gaplen > self.max_gap:
-            return False
-        if len2 < self.min_closing_lvl:
-            return False
-        if self.allow_reset and len2 == 1 < len1:
-            return False
-        if one_count('', closing) != one_count(opening, closing):
-            # Prevents numbering change
-            return False
-        # The following conditions prevent some gaps from being closed
-        # when there is no hope of the closing line's indent being changed.
-        if closing[0] == '#' != opening[0]:
-            return False
-        if len2 == 1 and closing[0] != opening[0]:
-            return False
-        return True
-
-
-################################################################################
-# STYLE
-################################################################################
-class StyleFix:
-    def __init__(self, *, hide_extra_bullets=0, keep_last_asterisk=False):
-        """
         The parameter hide_extra_bullets determines how "floating"
         bullets that occur inside an overindentation are treated.
         Example:
@@ -152,41 +64,87 @@ class StyleFix:
         The parameter keep_last_asterisk, if True, results in the last '*' of
         an indent always being preserved.
         """
+        if min_closing_lvl < 1:
+            raise ValueError('min_closing_lvl should be at least 1')
+        self.min_closing_lvl = min_closing_lvl
+        self.max_gap = max_gap
+        self.allow_reset = bool(allow_reset)
+
         if hide_extra_bullets not in range(3):
             raise ValueError('hide_extra_bullets should be in range(3)')
         if hide_extra_bullets == 2 and keep_last_asterisk:
             raise ValueError(('cannot have both hide_extra_bullets == 2'
                               ' and keep_last_asterisk is True'))
-
         self.hide_extra_bullets = hide_extra_bullets
         self.keep_last_asterisk = bool(keep_last_asterisk)
 
     def __call__(self, text):
-        lines, score = line_partition(text), 0
-        if abort_style_fix(lines):
+        lines = line_partition(text)
+        if self._abort_fix(lines):
             return text, 0
+        lines, score = self._remove_indented_and_blank(lines)
         table_indices = begins_with_table(lines)
-        new_lines = []
-        prev_lvl, prev_indent = 0, ''
-        for i, line in enumerate(lines):
-            old_indent, lvl = indent_text_lvl(line)
-            if lvl == 0:
-                new_lines.append(line)
-                prev_lvl, prev_indent = 0, ''
-                continue
-            if i in table_indices:
-                # Don't change style if starting with a table.
-                new_indent = old_indent
+        new_lines = [lines[0]]
+        prev_indent = indent_text(lines[0])
+        if 0 in table_indices or has_list_breaking_newline(lines[0]):
+            prev_indent = ''
+        i, n = 1, len(lines)
+        while i < n:
+            # Find next nonblank line.
+            for j in range(i, n):
+                if not is_blank_line(lines[j]):
+                    break
             else:
-                new_indent = self._match_indent(prev_indent, old_indent)
+                break
+            line = lines[j]
+            txt_j, lvl_j = indent_text_lvl(line)
 
-            new_lines.append(new_indent + line[lvl:])
-            score += new_indent != old_indent
-            if i in table_indices or has_list_breaking_newline(line):
-                prev_lvl, prev_indent = 0, ''
+            # Compute potentially new indent.
+            if j in table_indices:
+                # Don't change style if starting with a table.
+                new_indent = txt_j
             else:
-                prev_lvl, prev_indent = len(new_indent), new_indent
+                new_indent = self._match_indent(prev_indent, txt_j)
+
+            # Check whether there is a gap that should be removed
+            gaplen = j - i
+            if gaplen == 0:
+                score += new_indent != txt_j
+            elif self._removable_gap(prev_indent, txt_j, new_indent, gaplen):
+                score += gaplen + (new_indent != txt_j)
+            else:
+                new_lines += lines[i : j]
+                new_indent = txt_j
+            new_lines.append(new_indent + line[lvl_j:])
+
+            prev_indent = new_indent
+            if j in table_indices or has_list_breaking_newline(line):
+                prev_indent = ''
+            i = j + 1
         return ''.join(new_lines), score
+
+    def _remove_indented_and_blank(self, lines):
+        """
+        Removes certain lines which are indented, but otherwise have no
+        content. More specifically, such lines which are followed by a line
+        with a higher indentation level are removed.
+        Returns a new list with those lines removed, and the number of lines
+        removed.
+        """
+        score = 0
+        i = len(lines) - 1
+        while i > 0:
+            lvl = indent_lvl(lines[i])
+            if lvl:
+                for i in range(i - 1, -1, -1):
+                    m = re.match(r'([:*#]+) *\n\Z', lines[i])
+                    if not m or len(m[1]) >= lvl:
+                        break
+                    lines[i] = ''
+                    score += 1
+            else:
+                i -= 1
+        return [x for x in lines if x], score
 
     def _match_indent(self, prev_indent, indent2):
         """
@@ -240,66 +198,6 @@ class StyleFix:
         new_indent = new_indent[:-1] + indent2[-1:]
         return new_indent
 
-
-class CombinedFix(GapFix, StyleFix):
-    def __init__(self, *,
-            min_closing_lvl=1, max_gap=1, allow_reset=False,
-            hide_extra_bullets=0, keep_last_asterisk=False):
-        GapFix.__init__(
-            self,
-            min_closing_lvl=min_closing_lvl,
-            max_gap=max_gap,
-            allow_reset=allow_reset)
-        StyleFix.__init__(
-            self,
-            hide_extra_bullets=hide_extra_bullets,
-            keep_last_asterisk=keep_last_asterisk)
-
-    def __call__(self, text):
-        lines = line_partition(text)
-        if self._abort_fix(lines):
-            return text, 0
-        lines, score = self._remove_indented_and_blank(lines)
-        table_indices = begins_with_table(lines)
-        new_lines = [lines[0]]
-        prev_indent = indent_text(lines[0])
-        if 0 in table_indices or has_list_breaking_newline(lines[0]):
-            prev_indent = ''
-        i, n = 1, len(lines)
-        while i < n:
-            # Find next nonblank line.
-            for j in range(i, n):
-                if not is_blank_line(lines[j]):
-                    break
-            else:
-                break
-            line = lines[j]
-            txt_j, lvl_j = indent_text_lvl(line)
-
-            # Compute potentially new indent.
-            if j in table_indices:
-                # Don't change style if starting with a table.
-                new_indent = old_indent
-            else:
-                new_indent = self._match_indent(prev_indent, txt_j)
-
-            # Check whether there is a gap that should be removed
-            gaplen = j - i
-            if gaplen == 0:
-                score += new_indent != txt_j
-            elif self._removable_gap(prev_indent, txt_j, new_indent, gaplen):
-                score += gaplen + (new_indent != txt_j)
-            else:
-                new_lines += lines[i : j]
-                new_indent = txt_j
-            new_lines.append(new_indent + line[lvl_j:])
-
-            prev_indent = new_indent
-            if j in table_indices or has_list_breaking_newline(line):
-                prev_indent = ''
-            i = j + 1
-        return ''.join(new_lines), score
-
     def _removable_gap(self, opening, oldclose, newclose, gaplen):
         """
         Returns True if and only if the gap should be removed.
@@ -324,8 +222,11 @@ class CombinedFix(GapFix, StyleFix):
         return True
 
     def _abort_fix(self, lines):
-        # Abort if there is a wikilink containing a disallowed newline,
-        # inside an indented line.
+        # Bail out in the following cases:
+        # 1. There is a wikilink containing a disallowed newline,
+        # and the wikilink is itself inside an indented line.
+        # 2. The numbering for a numbered list might change, even if
+        # the change would actually be correct.
         for i, line in enumerate(lines):
             if indent_text(line):
                 wt = wtp.parse(line)
@@ -480,25 +381,6 @@ def has_list_breaking_newline(line):
             continue
         if '\n' in x.contents:
             return True
-    return False
-
-def abort_style_fix(lines):
-    """
-    Last resort for difficult edge cases. In these cases,
-    just don't apply the fix.
-    """
-    # Abort if there is a wikilink containing a disallowed newline.
-    n = len(lines)
-    for i, line in enumerate(lines):
-        if not indent_text(line):
-            continue
-        if not (i + 1 < n and indent_text(lines[i + 1])):
-            continue
-        wt = wtp.parse(line)
-        for x in wt.wikilinks:
-            s = str(x).lstrip('[').rstrip(']')
-            if s.endswith('\n') or len(line_partition(s)) > 1:
-                return True
     return False
 
 def expand_list(l, title=None):

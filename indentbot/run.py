@@ -90,10 +90,10 @@ def fix_page(page, fixer, *, threshold):
         page.text = newtext
         summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]], '
             + '[[MOS:INDENTGAP|INDENTGAP]], [[MOS:LISTGAP|LISTGAP]]. '
-            + '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]].')
+            + f'Total of {fixer.total_score} lines deleted or modified.')
         try:
             page.save(summary=summary,
-                      minor=False,
+                      minor=True,
                       botflag=True,
                       nocreate=True,
                       quiet=True)

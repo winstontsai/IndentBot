@@ -89,8 +89,7 @@ def fix_page(page, fixer, *, threshold):
     if fixer.total_score >= threshold:
         page.text = newtext
         summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]], '
-            + '[[MOS:INDENTGAP|INDENTGAP]], and [[MOS:LISTGAP|LISTGAP]]. '
-            + '({} markup adjustments, {} blank lines removed) '.format(*score)
+            + '[[MOS:INDENTGAP|INDENTGAP]], [[MOS:LISTGAP|LISTGAP]]. '
             + '[[Wikipedia:Bots/Requests for approval/IndentBot|Trial edit]].')
         try:
             page.save(summary=summary,
@@ -99,28 +98,28 @@ def fix_page(page, fixer, *, threshold):
                       nocreate=True,
                       quiet=True)
         except EditConflictError:
-            logger.warning('Edit conflict for {}.'.format(title_link))
+            logger.warning(f'Edit conflict for {title_link}.')
         except LockedPageError:
-            logger.warning('{} is locked.'.format(title_link))
+            logger.warning(f'{title_link} is locked.')
         except AbuseFilterDisallowedError:
             logger.warning(
-                'Edit to {} prevented by abuse filter.'.format(title_link))
+                f'Edit to {title_link} prevented by abuse filter.')
         except SpamblacklistError:
             logging.warning(
-                'Edit to {} prevented by spam blacklist.'.format(title_link))
+                f'Edit to {title_link} prevented by spam blacklist.')
         except OtherPageSaveError as err:
             if err.args.startswith('Editing restricted by {{bots}}'):
                 logger.warning(
-                    'Edit to {} prevented by {{{{bots}}}}.'.format(title_link))
+                    f'Edit to {title_link} prevented by {{{{bots}}}}.')
             else:
                 logger.exception(
-                    'OtherPageSaveError for {}.'.format(title_link))
+                    f'OtherPageSaveError for {title_link}.')
                 raise
         except PageSaveRelatedError:
-            logger.exception('PageSaveRelatedError for {}.'.format(title_link))
+            logger.exception(f'PageSaveRelatedError for {title_link}.')
             raise
         except Exception:
-            logger.exception('Error when saving {}.'.format(title_link))
+            logger.exception(f'Error when saving {title_link}.')
             raise
         else:
             return pat.diff_template(page)
@@ -140,8 +139,7 @@ def mainloop(args):
     chunk, delay, limit = args.chunk, args.delay, args.total
     threshold = args.threshold
     logger.info(('Starting run. '
-        '(chunk={}, delay={}, limit={}, '
-        'threshold={})').format(chunk, delay, limit, threshold))
+        f'(chunk={chunk}, delay={delay}, limit={limit}, threshold={threshold})'))
     t1 = time.perf_counter()
     count = 0
     FIXER = TextFixer([CombinedFix(
@@ -157,11 +155,10 @@ def mainloop(args):
             if args.verbose:
                 print(diff)
         if count >= limit:
-            logger.info('Limit ({}) reached.'.format(limit))
+            logger.info(f'Limit ({limit}) reached.')
             break
     t2 = time.perf_counter()
-    logger.info(('Ending run. Total edits={}. '
-                 'Time elapsed={} seconds.').format(count, t2 - t1))
+    logger.info(f'Ending run. Total edits={count}. Time elapsed={t2-t1} seconds.')
 
 
 def run():
@@ -175,7 +172,7 @@ def run():
                  threshold=args.threshold,
                  verbose=args.verbose)
     except BaseException as e:
-        logger.error('Ending run due to {}.'.format(type(e).__name__))
+        logger.error(f'Ending run due to {type(e).__name__}.')
         raise
     finally:
         pat.set_status_page('inactive')

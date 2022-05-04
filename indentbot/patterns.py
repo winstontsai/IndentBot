@@ -63,7 +63,7 @@ def set_status_page(status):
         raise ValueError('status must be of type str')
     page = pwb.Page(pwb.Site('en', 'wikipedia'), 'User:IndentBot/status')
     page.text = status
-    page.save(summary='Updating status: {}'.format(status),
+    page.save(summary=f'Updating status: {status}',
               minor=True,
               botflag=True,
               quiet=True,)
@@ -79,6 +79,8 @@ COMMENT_RE = r'<!--(.(?<!-->))*?-->'
 ################################################################################
 MAINTAINERS = frozenset(['IndentBot', 'Notacardoor'])
 
+# Example sig:
+# [[User:ASDF|FDSA]] ([[User talk:ASDF|talk]]) 01:24, 22 March 2022 (UTC)
 SIGNATURE_PATTERN = (
     r'\[\[[Uu]ser(?: talk)?:[^\n]+?' +                  # user page link
     r'([0-2]\d):([0-5]\d), ' +                          # hh:mm

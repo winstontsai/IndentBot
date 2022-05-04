@@ -11,13 +11,24 @@ class TextFixer:
         nonnegative numeric score.
         It is up to the callable what the score represents, but ideally it
         reoresents the "amount" of fixing that's been done by the callable.
-        Optionally, the text parameter can be provided to immediately fix
-        some text upon object initialization.
+
+        The parameter onepass determines if only one round of fixes
+        will be applied, or if the fixes will be applied in a loop until
+        the text no longer changes.
+        By default, if there is only one fix given, it will be applied
+        once. Otherwise fixes are applied in a loop until the text no
+        longer changes.
         """
         if not fixes:
-            raise ValueError('no fixes provided')
-        if not fixes or any(not callable(f) for f in fixes):
-            raise TypeError('at least one fix must be given and all fixes must be callable')
+            raise ValueError('No fixes provided')
+        # Convert fixes to a tuple.
+        # If fixes is not iterable, convert it to 1-tuple.
+        try:
+            fixes = tuple(fixes)
+        except TypeError:
+            fixes = tuple([fixes])
+        if any(not callable(f) for f in fixes):
+            raise TypeError('All fixes must be callable')
         self._fixes = fixes
         self._fix_count = 0
         if onepass is None:

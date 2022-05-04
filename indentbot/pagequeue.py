@@ -90,7 +90,7 @@ def recent_changes_gen(start, end):
     Yield recent changes between the timestamps start and end, inclusive,
     with the potential to be edited by IndentBot.
     """
-    logger.info('Checking edits from {} to {}.'.format(start, end))
+    logger.info(f'Checking edits from {start} to {end}.')
     # NOTE: User talk namespace (3) is currently avoided.
     TALK_SPACES = (1, 5, 7, 11, 13, 15, 101, 119, 711, 829)
     # Wikipedia, Template namespaces
@@ -215,8 +215,8 @@ def has_sig_with_timestamp(ts, text):
     timestamp given by ts. Returns None if a match is not found.
 
     Example timestamp:
-    2022-05-02T23:37:57Z
-    Example sig:
+    2022-05-03T00:54:18Z
+    Example signature:
     [[User:ASDF|FDSA]] ([[User talk:ASDF|talk]]) 01:24, 22 March 2022 (UTC)
     """
     dt = datetime.fromisoformat(ts.rstrip('Z'))

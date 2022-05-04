@@ -93,7 +93,7 @@ class GapFix:
                 i -= 1
         return [x for x in lines if x], score
 
-    def _removable_gap(self, opening, closing, glen):
+    def _removable_gap(self, opening, closing, gaplen):
         """
         Opening is the opening line's indent characters.
         Closing is the closing line's indent characters.
@@ -104,7 +104,7 @@ class GapFix:
         for the closing line to improve its indent.
         """
         len1, len2 = len(opening), len(closing)
-        if glen < 1 or glen > self.max_gap:
+        if gaplen < 1 or gaplen > self.max_gap:
             return False
         if len2 < self.min_closing_lvl:
             return False
@@ -284,11 +284,11 @@ class CombinedFix(GapFix, StyleFix):
                 new_indent = self._match_indent(prev_indent, txt_j)
 
             # Check whether there is a gap that should be removed
-            glen = j - i
-            if glen == 0:
+            gaplen = j - i
+            if gaplen == 0:
                 score += new_indent != txt_j
-            elif self._removable_gap(prev_indent, txt_j, new_indent, glen):
-                score += glen + (new_indent != txt_j)
+            elif self._removable_gap(prev_indent, txt_j, new_indent, gaplen):
+                score += gaplen + (new_indent != txt_j)
             else:
                 new_lines += lines[i : j]
                 new_indent = txt_j
@@ -300,19 +300,19 @@ class CombinedFix(GapFix, StyleFix):
             i = j + 1
         return ''.join(new_lines), score
 
-    def _removable_gap(self, opening, oldclose, newclose, glen):
+    def _removable_gap(self, opening, oldclose, newclose, gaplen):
         """
         Returns True if and only if the gap should be removed.
         """
-        if glen < 1:
-            raise ValueError('glen should be >= 1')
+        if gaplen < 1:
+            raise ValueError('gaplen should be >= 1')
         len1, len2 = len(opening), len(newclose)
         # Only consider gaps between indented lines.
         if not (len1 and len2):
             return False
         if opening[0] != newclose[0]:
             return False
-        if glen > self.max_gap:
+        if gaplen > self.max_gap:
             return False
         if len2 < self.min_closing_lvl:
             return False
@@ -398,13 +398,13 @@ def line_partition(text):
     # should be treated as part of the preceding line.
     # So we don't split on the '\n' immediately preceding such a line.
     for m in re.finditer(
-            r'\n *{}( |{})*(?=\n)'.format(COMMENT_RE, COMMENT_RE),
+            fr'\n *{COMMENT_RE}( |{COMMENT_RE})*(?=\n)',
             text, flags=re.S):
         bad_indices.update(find_all(text, '\n', *m.span()))
 
     # whitespace followed by a Category link doesn't break lines
     for m in re.finditer(
-            r'(\s|{})+\[\[Category:'.format(COMMENT_RE),
+            fr'(\s|{COMMENT_RE})+\[\[Category:',
             text, flags=re.I):
         bad_indices.update(find_all(text, '\n', *m.span()))
 

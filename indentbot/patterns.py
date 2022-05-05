@@ -1,7 +1,7 @@
 """
 This module defines some utilities and constants.
 """
-from calendar import month_name, month_abbr
+from calendar import month_name
 
 import pywikibot as pwb
 import regex as re
@@ -56,14 +56,16 @@ def diff_template(page, label=None):
 
 
 def set_status_page(status):
-    if status not in ('active', 'paused', 'inactive'):
+    allowed = ('active', 'paused', 'inactive')
+    if status not in allowed:
         raise ValueError("status must be 'active', 'paused', or 'inactive'")
     page = pwb.Page(pwb.Site('en', 'wikipedia'), 'User:IndentBot/status')
-    page.text = status
-    page.save(summary=f'Updating status: {status}',
-              minor=True,
-              botflag=True,
-              quiet=True,)
+    if page.text != status:
+        page.text = status
+        page.save(summary=f'Updating status: {status}',
+                  minor=True,
+                  botflag=True,
+                  quiet=True,)
 
 
 ################################################################################
@@ -82,8 +84,8 @@ SIGNATURE_PATTERN = (
     r'\[\[[Uu]ser(?: talk)?:[^\n]+?' +                  # user page link
     r'([0-2]\d):([0-5]\d), ' +                          # hh:mm
     r'([1-3]?\d) ' +                                    # day
-    '(' + '|'.join(month_name[1:] + month_abbr[1:]) + ') ' +  # month name
-    r'(2\d{3}) \(UTC\)'                                 # yyyy
+    '(' + '|'.join(month_name[1:]) + ') ' +             # month name
+    r'(2\d{3}) \(UTC\)'                                 # yyyy (UTC)
 )
 
 PARSER_EXTENSION_TAGS = frozenset((

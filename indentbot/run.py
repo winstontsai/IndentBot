@@ -10,7 +10,7 @@ from pywikibot.exceptions import *
 import pagequeue
 import patterns as pat
 
-from fixes import GapFix, StyleFix, CombinedFix
+from fixes import CombinedFix
 from textfixer import TextFixer
 
 ################################################################################

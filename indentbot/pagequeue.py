@@ -35,6 +35,12 @@ class PageQueue:
         self._REMOVED = '<removed-task>'
         self._counter = itertools.count(start=1)
 
+    def clear(self):
+        self._pq.clear()
+        self._len = 0
+        self._entry_finder.clear()
+        self._counter = itertools.count(start=1)
+
     def __len__(self):
         return self._len
 
@@ -152,6 +158,13 @@ def continuous_page_gen(chunk, delay):
                 pq.add_from(potential_page_gen(rcgen))
                 last_load = current_time
             yield from pq.pop_up_to(cutoff)
+        else:
+            # Reset the queue whenever the bot gets paused.
+            # Setting last_load to cutoff ensures
+            # that there isn't a huge page load if the bot gets paused
+            # for a while and then resumed.
+            pq.clear()
+            last_load = cutoff
         old_time = current_time
 
 

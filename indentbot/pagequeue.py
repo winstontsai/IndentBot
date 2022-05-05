@@ -90,7 +90,7 @@ def recent_changes_gen(start, end):
     Yield recent changes between the timestamps start and end, inclusive,
     with the potential to be edited by IndentBot.
     """
-    logger.info(f'Checking edits from {start} to {end}.')
+    logger.info(f'Retrieving edits from {start} to {end}.')
     # NOTE: User talk namespace (3) is currently avoided.
     TALK_SPACES = (1, 5, 7, 11, 13, 15, 101, 119, 711, 829)
     # Wikipedia, Template namespaces
@@ -191,7 +191,9 @@ def title_filter(title):
         return True
     if title.startswith('Template:') and not valid_template_page(title):
         return True
-    BAD_TITLE_PREFIXES = frozenset(['Wikipedia:Arbitration/Requests/',])
+    BAD_TITLE_PREFIXES = frozenset([
+        'Wikipedia:Arbitration/Requests/',
+    ])
     if any(title.startswith(x) for x in BAD_TITLE_PREFIXES):
         return True
     return False

@@ -69,7 +69,7 @@ def set_up_logging(logfile):
         path.mkdir(exist_ok = True)
         path = path / 'indentbot.log'
         logfile = str(path)
-    file_handler = logging.FileHandler(filename=logfile)
+    file_handler = logging.FileHandler(filename=logfile, mode='a')
     formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.INFO)
@@ -138,6 +138,7 @@ def mainloop(args):
     """
     chunk, delay, limit = args.chunk, args.delay, args.total
     threshold = args.threshold
+    verbose = args.verbose
     logger.info(('Starting run. '
         f'(chunk={chunk}, delay={delay}, limit={limit}, threshold={threshold})'))
     t1 = time.perf_counter()
@@ -152,7 +153,7 @@ def mainloop(args):
         diff = fix_page(p, FIXER, threshold=threshold)
         if diff:
             count += 1
-            if args.verbose:
+            if verbose:
                 print(diff)
         if count >= limit:
             logger.info(f'Limit ({limit}) reached.')
@@ -166,11 +167,7 @@ def run():
     set_up_logging(logfile=args.logfile)
     try:
         pat.set_status_page('active')
-        mainloop(chunk=args.chunk,
-                 delay=args.delay,
-                 limit=args.total,
-                 threshold=args.threshold,
-                 verbose=args.verbose)
+        mainloop(args)
     except BaseException as e:
         logger.error(f'Ending run due to {type(e).__name__}.')
         raise

@@ -88,12 +88,10 @@ def fix_page(page, fixer, *, threshold):
     # Only edit User/User talk pages if IndentBot is explicitly allowed
     if title.startswith('User') and not has_bot_allow_template(page.text):
         return
-    newtext, score = fixer.fix(page.text)
+    page.text = fixer.fix(page.text)[0]
     if fixer.total_score < threshold:
         return
-    page.text = newtext
-    summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]], '
-        + '[[MOS:INDENTGAP|INDENTGAP]], [[MOS:LISTGAP|LISTGAP]]. '
+    summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]]. '
         + f'Total of {fixer.total_score} lines deleted or modified.')
     try:
         page.save(summary=summary,

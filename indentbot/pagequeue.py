@@ -11,6 +11,7 @@ import time
 from datetime import datetime, timedelta
 
 import regex as re
+import wikitextparser as wtp
 
 from pywikibot import Page, Site, User
 from pywikibot.exceptions import *
@@ -51,7 +52,7 @@ class PageQueue:
 
     def add_page(self, page):
         """Adds a page OR updates the priority of a page."""
-        title = page.title()
+        title = page.title(with_ns=True)
         if title in self._entry_finder:
             self.remove_page(title)
         entry = [page.editTime(), next(self._counter), page]
@@ -67,7 +68,7 @@ class PageQueue:
         while self._pq:
             prio, count, page = heapq.heappop(self._pq)
             if page is not self._REMOVED:
-                del self._entry_finder[page.title()]
+                del self._entry_finder[page.title(with_ns=True)]
                 self._len -= 1
                 return page
         raise KeyError('pop from an empty PageQueue')
@@ -97,8 +98,7 @@ def recent_changes_gen(start, end):
     with the potential to be edited by IndentBot.
     """
     logger.info(f'Retrieving edits from {start} to {end}.')
-    # NOTE: User talk namespace (3) is currently avoided.
-    TALK_SPACES = (1, 5, 7, 11, 13, 15, 101, 119, 711, 829)
+    TALK_SPACES = (1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829)
     # Wikipedia, Template namespaces
     OTHER_SPACES = (4, 10)
     NAMESPACES = TALK_SPACES + OTHER_SPACES
@@ -108,7 +108,7 @@ def recent_changes_gen(start, end):
             minor=False, bot=False, redirect=False):
         if change['newlen'] - change['oldlen'] < 100:
             continue
-        if title_filter(change['title']):
+        if should_not_edit(change['title']):
             continue
         yield change
 
@@ -124,11 +124,14 @@ def potential_page_gen(changes):
     for c in changes:
         pdict.setdefault(c['title'], set()).add(c['timestamp'])
     for page in PreloadingGenerator(Page(SITE, title) for title in pdict):
-        title, text = page.title(), page.text
-        if not (page.isTalkPage() or has_n_sigs(text, 5)):
+        title, text = page.title(with_ns=True), page.text
+        if not (page.isTalkPage() or has_n_sigs(5, text)):
             continue
-        if any(has_sig_with_timestamp(ts, text) for ts in pdict[title]):
-            yield page
+        if not any(has_sig_with_timestamp(ts, text) for ts in pdict[title]):
+            continue
+        if title.startswith('User') and not has_bot_allow_template(text):
+            continue
+        yield page
 
 
 def continuous_page_gen(chunk, delay):
@@ -171,7 +174,7 @@ def continuous_page_gen(chunk, delay):
 ################################################################################
 # Helper functions
 ################################################################################
-def sandbox(title):
+def is_sandbox(title):
     """
     Return True if the title looks like it belongs to a sandbox.
     """
@@ -196,11 +199,11 @@ def valid_template_page(title):
     return title.startswith('Template:Did you know nominations/')
 
 
-def title_filter(title):
+def should_not_edit(title):
     """
     Returns True iff a page should NOT be edited based only on its title.
     """
-    if sandbox(title):
+    if is_sandbox(title):
         return True
     if title.startswith('Template:') and not valid_template_page(title):
         return True
@@ -212,7 +215,7 @@ def title_filter(title):
     return False
 
 
-def has_n_sigs(text, n):
+def has_n_sigs(n, text):
     """
     Returns True iff we find at least n user signatures in the text.
     """
@@ -242,6 +245,23 @@ def has_sig_with_timestamp(ts, text):
     year = dt.strftime("%Y")
     p = fr'\[\[[Uu]ser(?: talk)?:[^\n]+?{hh}:{mm}, {day} {mon} {year} \(UTC\)'
     return re.search(p, text)
+
+
+def has_bot_allow_template(text):
+    """
+    Returns True iff {{Bots}} (or one of its redirects) exists
+    and IndentBot is named in the allow list.
+    """
+    names = ('Bots', 'Nobots', 'NOBOTS', 'Botsdeny', 'Bots deny')
+    wt = wtp.parse(text)
+    for template in wt.templates:
+        if template.normal_name(capitalize=True) not in names:
+            continue
+        if allowed := template.get_arg('allow'):
+            for x in allowed.value.split(','):
+                if x.strip() == 'IndentBot':
+                    return True
+    return False
 
 
 def check_pause_or_resume(start, end):

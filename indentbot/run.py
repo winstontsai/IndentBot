@@ -7,10 +7,10 @@ from pathlib import Path
 from pywikibot import Page
 from pywikibot.exceptions import *
 
-import pagequeue
 import patterns as pat
 
 from fixes import CombinedFix
+from pagequeue import continuous_page_gen, has_bot_allow_template
 from textfixer import TextFixer
 
 ################################################################################
@@ -84,7 +84,10 @@ def fix_page(page, fixer, *, threshold):
     If save is successful, returns a string for Template:Diff2.
     Returns None (or raises an exception) otherwise.
     """
-    title, title_link = page.title(), page.title(as_link=True)
+    title, title_link = page.title(with_ns=True), page.title(as_link=True)
+    # Only edit User/User talk pages if IndentBot is explicitly allowed
+    if title.startswith('User') and not has_bot_allow_template(page.text):
+        return
     newtext, score = fixer.fix(page.text)
     if fixer.total_score < threshold:
         return
@@ -149,7 +152,7 @@ def mainloop(args):
                 allow_reset=args.allow_reset,
                 min_closing_lvl=args.min_closing_lvl,
                 max_gap=args.max_gap)])
-    for p in pagequeue.continuous_page_gen(chunk, delay):
+    for p in continuous_page_gen(chunk, delay):
         diff = fix_page(p, FIXER, threshold=threshold)
         if diff:
             count += 1

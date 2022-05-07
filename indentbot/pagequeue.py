@@ -136,13 +136,16 @@ def potential_page_gen(changes):
         pdict.setdefault(c['title'], set()).add(c['timestamp'])
     for page in PreloadingGenerator(Page(SITE, title) for title in pdict):
         title, text = page.title(with_ns=True), page.text
-        if not page.isTalkPage():
-            if title.startswith('User') and not has_bot_allow_template(text):
-                continue
-            if title.startswith('Wikipedia:') and not has_n_sigs(5, text):
-                continue
-            if title.startswith('Template:') and not valid_template_page(title):
-                continue
+        # User/User talk pages must explicitly allow IndentBot
+        if title.startswith('User') and not has_bot_allow_template(text):
+            continue
+        # In the Template namespace, only DYK nominations are allowed
+        if title.startswith('Template:') and not valid_template_page(title):
+            continue
+        # Wikipedia namespace pages must have at least 5 signatures
+        if title.startswith('Wikipedia:') and not has_n_sigs(5, text):
+            continue
+        # Must have a timestamp matching the edit time
         if not any(has_sig_with_timestamp(ts, text) for ts in pdict[title]):
             continue
         yield page
@@ -192,14 +195,17 @@ def is_sandbox(title):
     """
     Return True if the title looks like it belongs to a sandbox.
     """
-    SANDBOXES = frozenset([
+    SANDBOXES = (
         'Wikipedia:Sandbox',
         'Wikipedia talk:Sandbox',
         'Wikipedia:Articles for creation/AFC sandbox',
+        'Wikipedia:AutoWikiBrowser/Sandbox',
+        'User:Sandbox',
         'User talk:Sandbox',
         'User talk:Sandbox for user warnings',
-        'User:Sandbox',
-    ])
+        'User talk:192.0.2.16',
+        'User talk:2001:DB8:10:0:0:0:0:1'
+    )
     if title in SANDBOXES:
         return True
     return bool(re.search(r'/sandbox(?: ?\d+)?(?:/|\Z)', title, flags=re.I))

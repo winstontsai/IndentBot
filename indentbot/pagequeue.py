@@ -136,12 +136,14 @@ def potential_page_gen(changes):
         pdict.setdefault(c['title'], set()).add(c['timestamp'])
     for page in PreloadingGenerator(Page(SITE, title) for title in pdict):
         title, text = page.title(with_ns=True), page.text
-        if not (page.isTalkPage() or valid_template_page(title)):
-            if not (title.startswith('Wikipedia:') and has_n_sigs(5, text)):
+        if not page.isTalkPage():
+            if title.startswith('User') and not has_bot_allow_template(text):
+                continue
+            if title.startswith('Wikipedia:') and not has_n_sigs(5, text):
+                continue
+            if title.startswith('Template:') and not valid_template_page(title):
                 continue
         if not any(has_sig_with_timestamp(ts, text) for ts in pdict[title]):
-            continue
-        if title.startswith('User') and not has_bot_allow_template(text):
             continue
         yield page
 

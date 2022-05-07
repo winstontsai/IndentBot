@@ -98,8 +98,19 @@ def recent_changes_gen(start, end):
     with the potential to be edited by IndentBot.
     """
     logger.info(f'Retrieving edits from {start} to {end}.')
+    # 0   (Main/Article)  Talk            1
+    # 2   User            User talk       3
+    # 4   Wikipedia       Wikipedia talk  5
+    # 6   File            File talk       7
+    # 8   MediaWiki       MediaWiki talk  9
+    # 10  Template        Template talk   11
+    # 12  Help            Help talk       13
+    # 14  Category        Category talk   15
+    # 100 Portal          Portal talk     101
+    # 118 Draft           Draft talk      119
+    # 710 TimedText       TimedText talk  711
+    # 828 Module           Module talk    829
     TALK_SPACES = (1, 3, 5, 7, 11, 13, 15, 101, 119, 711, 829)
-    # Wikipedia, Template namespaces
     OTHER_SPACES = (4, 10)
     NAMESPACES = TALK_SPACES + OTHER_SPACES
     for change in SITE.recentchanges(
@@ -125,8 +136,9 @@ def potential_page_gen(changes):
         pdict.setdefault(c['title'], set()).add(c['timestamp'])
     for page in PreloadingGenerator(Page(SITE, title) for title in pdict):
         title, text = page.title(with_ns=True), page.text
-        if not (page.isTalkPage() or has_n_sigs(5, text)):
-            continue
+        if not (page.isTalkPage() or valid_template_page(title)):
+            if not (title.startswith('Wikipedia:') and has_n_sigs(5, text)):
+                continue
         if not any(has_sig_with_timestamp(ts, text) for ts in pdict[title]):
             continue
         if title.startswith('User') and not has_bot_allow_template(text):
@@ -259,7 +271,7 @@ def has_bot_allow_template(text):
             continue
         if allowed := template.get_arg('allow'):
             for x in allowed.value.split(','):
-                if x.strip() == 'IndentBot':
+                if x.strip().lower() == 'indentbot':
                     return True
     return False
 

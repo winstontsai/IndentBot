@@ -40,7 +40,7 @@ def get_args():
 
     # Keyword options for the fixes.
     # gap
-    parser.add_argument('--min_closing_lvl', type=int, default=1,
+    parser.add_argument('--min_closing_lvl', type=int, default=2,
         help='minimum level of the closing line of a gap to be removed')
     parser.add_argument('--max_gap', type=int, default=1,
         help='maximum length of a gap to be removed')

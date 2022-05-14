@@ -11,7 +11,7 @@ from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS)
 
 class CombinedFix:
     def __init__(self, *,
-            min_closing_lvl=1, max_gap=1, allow_reset=False,
+            min_closing_lvl=2, max_gap=1, allow_reset=False,
             hide_extra_bullets=0, keep_last_asterisk=False):
         """
         With the most liberal settings, essentially all gaps
@@ -390,7 +390,7 @@ def expand_list(l, title=None):
     """
     if not l:
         return []
-    DELIMITER = 'INDENTBOTDELIMITERat' + str(datetime.utcnow())
+    DELIMITER = f'INDENTBOTDELIMITERat{datetime.utcnow()}'
     z = DELIMITER.join(l)
     z = SITE.expand_text(z, title=title, includecomments=False)
     return z.split(DELIMITER)

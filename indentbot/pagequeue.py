@@ -275,7 +275,9 @@ def has_bot_allow_template(text):
     names = ('Bots', 'Nobots', 'NOBOTS', 'Botsdeny', 'Bots deny')
     wt = wtp.parse(text)
     for template in wt.templates:
-        if template.normal_name(capitalize=True) not in names:
+        n = template.name.strip()
+        n = n[:1].upper() + n[1:] # capitalize first character only
+        if n not in names:
             continue
         if allowed := template.get_arg('allow'):
             for x in allowed.value.split(','):

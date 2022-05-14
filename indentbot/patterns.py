@@ -55,10 +55,15 @@ def diff_template(page, label=None):
     return f'{{{{Diff2|{page.latest_revision_id}|{label}}}}}'
 
 
+################################################################################
+# Statuses
+################################################################################
+STATUSES = ('inactive', 'paused', 'active')
+INACTIVE, PAUSED, ACTIVE = STATUSES
+
 def set_status_page(status):
-    allowed = ('active', 'paused', 'inactive')
-    if status not in allowed:
-        raise ValueError("status must be 'active', 'paused', or 'inactive'")
+    if status not in STATUSES:
+        raise ValueError(f'status must be in {STATUSES}.')
     page = pwb.Page(pwb.Site('en', 'wikipedia'), 'User:IndentBot/status')
     if page.text != status:
         page.text = status
@@ -67,6 +72,9 @@ def set_status_page(status):
                   botflag=True,
                   quiet=True,)
 
+def get_status_page():
+    page = pwb.Page(pwb.Site('en', 'wikipedia'), 'User:IndentBot/status')
+    return page.text
 
 ################################################################################
 # Regular expressions

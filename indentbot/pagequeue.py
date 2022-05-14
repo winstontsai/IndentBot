@@ -25,7 +25,7 @@ SITE = Site('en', 'wikipedia')
 SITE.login(user='IndentBot')
 
 # Certain users are allowed to stop and resume the bot.
-PAUSED = False
+ON_PAUSE = False
 ################################################################################
 
 class PageQueue:
@@ -172,7 +172,7 @@ def continuous_page_gen(chunk, delay):
         current_time = SITE.server_time()
         cutoff = current_time - delay
         check_pause_or_resume(old_time + sec, current_time)
-        if not PAUSED:
+        if not ON_PAUSE:
             if last_load < cutoff:
                 rcgen = recent_changes_gen(last_load + sec, current_time)
                 pq.add_from(potential_page_gen(rcgen))
@@ -272,12 +272,13 @@ def has_bot_allow_template(text):
     Returns True iff {{Bots}} (or one of its redirects) exists
     and IndentBot is named in the allow list.
     """
-    names = ('Bots', 'Nobots', 'NOBOTS', 'Botsdeny', 'Bots deny')
     wt = wtp.parse(text)
     for template in wt.templates:
-        n = template.name.strip()
-        n = n[:1].upper() + n[1:] # capitalize first character only
-        if n not in names:
+        try:
+            n = template.normal_name(capitalize=True)
+        except IndexError:
+            continue
+        if n not in ('Bots', 'Nobots', 'NOBOTS', 'Botsdeny', 'Bots deny'):
             continue
         if allowed := template.get_arg('allow'):
             for x in allowed.value.split(','):
@@ -292,8 +293,8 @@ def check_pause_or_resume(start, end):
     Currently, the policy is that any autoconfirmed user or admin can stop
     the bot, while only admins can resume it.
     """
-    global PAUSED
-    original_status = PAUSED
+    global ON_PAUSE
+    original_status = ON_PAUSE
     page = Page(SITE, 'User talk:IndentBot')
     for rev in page.revisions(starttime=start, endtime=end, reverse=True):
         user   = rev['user']
@@ -311,14 +312,14 @@ def check_pause_or_resume(start, end):
                "    Revid     = {}\n"
                "    Timestamp = {}\n"
                "    Comment   = {}")
-        if cmt.endswith('PAUSE') and not PAUSED and can_stop:
-            PAUSED = True
+        if cmt.endswith('PAUSE') and not ON_PAUSE and can_stop:
+            ON_PAUSE = True
             logger.warning(msg.format("Paused", user, revid, ts, cmt))
-        elif cmt.endswith('RESUME') and PAUSED and can_resume:
-            PAUSED = False
+        elif cmt.endswith('RESUME') and ON_PAUSE and can_resume:
+            ON_PAUSE = False
             logger.warning(msg.format("Resumed", user, revid, ts, cmt))
-        if original_status != PAUSED:
-            pat.set_status_page('paused' if PAUSED else 'active')
+        if original_status != ON_PAUSE:
+            pat.set_status_page(pat.PAUSED if ON_PAUSE else pat.ACTIVE)
 
 
 if __name__ == "__main__":

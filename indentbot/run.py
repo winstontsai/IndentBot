@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 import time
 
 from pathlib import Path
@@ -30,7 +31,7 @@ def get_args():
         help='log filename (default: $HOME/logs/indentbot.log)')
 
     parser.add_argument('-t', '--total', type=int, default=float('inf'),
-        help='maximum number of edits to make (default: inf)')
+        help='maximum number of edits to make (default: unlimited)')
 
     parser.add_argument('--threshold', type=int, default=1,
         help='minimum total error score for an edit to be made (default: 1)')
@@ -41,16 +42,16 @@ def get_args():
     # Keyword options for the fixes.
     # gap
     parser.add_argument('--min_closing_lvl', type=int, default=2,
-        help='minimum level of the closing line of a gap to be removed')
+        help='minimum level of the closing line of a gap to be removed (default: 2)')
     parser.add_argument('--max_gap', type=int, default=1,
-        help='maximum length of a gap to be removed')
+        help='maximum length of a gap to be removed (default: 1)')
     parser.add_argument('--allow_reset', action='store_true',
         help='allow gaps between a line with level>1 and a line with lvl=1')
 
     # style
     parser.add_argument('--hide_extra_bullets', type=int, default=0,
         help='determines how floating bullets inside an overindentation '
-        'are treated. For more info, see the docstring for StyleFix.')
+        'are treated. For more info, see the docstring for StyleFix. (default: 0)')
     parser.add_argument('--keep_last_asterisk', action='store_true',
         help='always keeps the rightmost asterisk')
     return parser.parse_args()
@@ -166,17 +167,21 @@ def mainloop(args):
 def run():
     args = get_args()
     set_up_logging(logfile=args.logfile)
+    if pat.get_status_page() != pat.INACTIVE:
+        logger.error(f'Cannot start run due to invalid status page.')
+        return 1
+    pat.set_status_page(pat.ACTIVE)
     try:
-        pat.set_status_page('active')
         mainloop(args)
     except BaseException as e:
         logger.error(f'Ending run due to {type(e).__name__}.')
         raise
     finally:
-        pat.set_status_page('inactive')
+        pat.set_status_page(pat.INACTIVE)
+    return 0
 
 
 if __name__ == '__main__':
     logger = logging.getLogger('indentbot_logger')
-    run()
+    sys.exit(run())
 

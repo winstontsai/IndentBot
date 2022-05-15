@@ -277,6 +277,7 @@ def has_bot_allow_template(text):
         try:
             n = template.normal_name(capitalize=True)
         except IndexError:
+            # normal_name(capitalize=True) cannot handle empty edge case
             continue
         if n not in ('Bots', 'Nobots', 'NOBOTS', 'Botsdeny', 'Bots deny'):
             continue

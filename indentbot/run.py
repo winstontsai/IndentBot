@@ -161,7 +161,7 @@ def mainloop(args):
             logger.info(f'Limit ({limit}) reached.')
             break
     t2 = time.perf_counter()
-    logger.info(f'Ending run. Total edits={count}. Time elapsed={t2-t1} seconds.')
+    logger.info(f'Ending run. Made {count} edits in {round(t2-t1, 2)} seconds.')
 
 
 def run():

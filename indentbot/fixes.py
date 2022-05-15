@@ -82,7 +82,7 @@ class CombinedFix:
         lines = line_partition(text)
         if self._abort_fix(lines):
             return text, 0
-        lines, score = self._remove_indented_and_blank(lines)
+        lines, score = self._adjust_indented_and_blank(lines)
         table_indices = begins_with_table(lines)
         new_lines = [lines[0]]
         prev_indent = indent_text(lines[0])
@@ -123,24 +123,22 @@ class CombinedFix:
             i = j + 1
         return ''.join(new_lines), score
 
-    def _remove_indented_and_blank(self, lines):
+    def _adjust_indented_and_blank(self, lines):
         """
-        Removes certain lines which are indented, but otherwise have no
-        content. More specifically, such lines which are followed by a line
-        with a higher indentation level are removed.
-        Returns a new list with those lines removed, and the number of lines
-        removed.
+        Adjusts lines which are indented, but otherwise have no
+        content. More specifically, if the next line has a higher indentation,
+        the current line is padded to match the indentation level.
         """
         score = 0
         i = len(lines) - 1
         while i > 0:
-            lvl = indent_lvl(lines[i])
+            txt, lvl = indent_text_lvl(lines[i])
             if lvl:
                 for i in range(i - 1, -1, -1):
                     m = re.match(r'([:*#]+) *\n\Z', lines[i])
                     if not m or len(m[1]) >= lvl:
                         break
-                    lines[i] = ''
+                    lines[i] = m[1] + txt[len(m[1]):] + '\n'
                     score += 1
             else:
                 i -= 1
@@ -243,7 +241,6 @@ class CombinedFix:
                 return True
             a = b
         return False
-
 
 ################################################################################
 # Line partitioning functions.

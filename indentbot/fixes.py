@@ -38,7 +38,7 @@ class CombinedFix:
         removed.
         Note that if min_closing_lvl >= 2, then the value of the parameter
         allow_reset is irrelevant and it will effectively be True since
-        gaps with closing line having level == 1 will not be removed.
+        gaps with a closing line of level 1 will not be removed.
 
         The parameter keep_last_asterisk, if True, results in the last '*' of
         an indent always being preserved.
@@ -48,7 +48,6 @@ class CombinedFix:
         self.min_closing_lvl = min_closing_lvl
         self.max_gap = max_gap
         self.allow_reset = bool(allow_reset)
-
         self.keep_last_asterisk = bool(keep_last_asterisk)
 
     def __call__(self, text):
@@ -130,16 +129,16 @@ class CombinedFix:
         p1, p2 = 0, 0
         lvl = len(indent2)
         minlvl = min(len(prev_indent), lvl)
-        last_asterisk = indent2.rfind('*')
+        last_ast_index = indent2.rfind('*')
         while p1 < minlvl and p2 < lvl:
             c1, c2 = prev_indent[p1], indent2[p2]
-            if self.keep_last_asterisk and p2 == last_asterisk:
+            if self.keep_last_asterisk and p2 == last_ast_index:
                 new_indent += '*'
             elif c2 == '#':
                 new_indent += c2
             elif c1 == '#':
                 if (p2 < lvl - 2 and indent2[p2+1] != '#' and not
-                    (self.keep_last_asterisk and p2 + 1 == last_asterisk)):
+                    (self.keep_last_asterisk and p2 + 1 == last_ast_index)):
                     # can replace next two chars with '#' while keeping
                     # same indent level
                     new_indent += '#'

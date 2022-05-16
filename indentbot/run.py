@@ -49,9 +49,6 @@ def get_args():
         help='allow gaps between a line with level>1 and a line with lvl=1')
 
     # style
-    parser.add_argument('--hide_extra_bullets', type=int, default=0,
-        help='determines how floating bullets inside an overindentation '
-        'are treated. For more info, see the docstring for StyleFix. (default: 0)')
     parser.add_argument('--keep_last_asterisk', action='store_true',
         help='always keeps the rightmost asterisk')
     return parser.parse_args()
@@ -145,12 +142,14 @@ def mainloop(args):
         f'(chunk={chunk}, delay={delay}, limit={limit}, threshold={threshold})'))
     t1 = time.perf_counter()
     count = 0
-    FIXER = TextFixer([CombinedFix(
-                hide_extra_bullets=args.hide_extra_bullets,
-                keep_last_asterisk=args.keep_last_asterisk,
-                allow_reset=args.allow_reset,
-                min_closing_lvl=args.min_closing_lvl,
-                max_gap=args.max_gap)])
+    FIXER = TextFixer(
+                CombinedFix(
+                    keep_last_asterisk=args.keep_last_asterisk,
+                    allow_reset=args.allow_reset,
+                    min_closing_lvl=args.min_closing_lvl,
+                    max_gap=args.max_gap
+                )
+            )
     for p in continuous_page_gen(chunk, delay):
         diff = fix_page(p, FIXER, threshold=threshold)
         if diff:

@@ -12,7 +12,7 @@ from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS)
 class CombinedFix:
     def __init__(self, *,
             min_closing_lvl=2, max_gap=1, allow_reset=False,
-            hide_extra_bullets=0, keep_last_asterisk=False):
+            keep_last_asterisk=False):
         """
         With the most liberal settings, essentially all gaps
         between two indented lines will be removed. The parameters serve
@@ -40,27 +40,6 @@ class CombinedFix:
         allow_reset is irrelevant and it will effectively be True since
         gaps with closing line having level == 1 will not be removed.
 
-        The parameter hide_extra_bullets determines how "floating"
-        bullets that occur inside an overindentation are treated.
-        Example:
-            * Comment 1.
-            ***: Comment 2.
-        Consider the second and third bullet points of Comment 2.
-        If hide_extra_bullets == 0, then they are left alone.
-        If hide_extra_bullets == 1, then only the rightmost bullet is kept
-            and the others (in this case just the second) get hidden.
-        If hide_extra_bullets == 2, then all floating bullets inside the
-            level increase, with the exception of the final indent character,
-            will be hidden. In this case, this means both the second and third
-            bullets will be hidden.
-
-        So the higher the integer, the more aggressive the hiding.
-
-        If the final indent character for Comment 2 was '*', then case 1 and 2
-        would have the same behavior and both the second and third bullets
-        of Comment 2 would be removed. This is because the rightmost bullet
-        would be the final indent character, which is always preserved.
-
         The parameter keep_last_asterisk, if True, results in the last '*' of
         an indent always being preserved.
         """
@@ -70,12 +49,6 @@ class CombinedFix:
         self.max_gap = max_gap
         self.allow_reset = bool(allow_reset)
 
-        if hide_extra_bullets not in range(3):
-            raise ValueError('hide_extra_bullets should be in range(3)')
-        if hide_extra_bullets == 2 and keep_last_asterisk:
-            raise ValueError(('cannot have both hide_extra_bullets == 2'
-                              ' and keep_last_asterisk is True'))
-        self.hide_extra_bullets = hide_extra_bullets
         self.keep_last_asterisk = bool(keep_last_asterisk)
 
     def __call__(self, text):
@@ -180,18 +153,7 @@ class CombinedFix:
             # Once out-of-sync, no reason to continue matching
             if new_indent[-1] != c1:
                 break
-
-        if self.hide_extra_bullets == 2:
-            for j in range(p2, lvl):
-                new_indent += ':' if indent2[j] == '*' else indent2[j]
-        elif self.hide_extra_bullets == 1:
-            for j in range(p2, lvl):
-                if j == last_asterisk:
-                    new_indent += '*'
-                else:
-                    new_indent += ':' if indent2[j] == '*' else indent2[j]
-        else:
-            new_indent += indent2[p2:]
+        new_indent += indent2[p2:]
         # Always keep original final indent character.
         new_indent = new_indent[:-1] + indent2[-1:]
         return new_indent

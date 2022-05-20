@@ -79,7 +79,10 @@ def get_status_page():
 ################################################################################
 # Regular expressions
 ################################################################################
-COMMENT_RE = r'<!--(.(?<!-->))*?-->'
+COMMENT_RE = r'(?:<!--(?:.(?<!-->))*?-->)'
+SPACE_OR_COMMENT_RE = fr'(?: |{COMMENT_RE})'
+CATEGORY_RE = fr'(?:\[\[{SPACE_OR_COMMENT_RE}*(?i:Category):(?:[^\n](?<!\]\]))+?\]\])'
+SPACE_OR_COMMENT_OR_CATEGORY_RE = fr'(?:{SPACE_OR_COMMENT_RE}|{CATEGORY_RE})'
 
 ################################################################################
 # Constants

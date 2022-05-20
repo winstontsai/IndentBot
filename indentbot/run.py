@@ -90,7 +90,7 @@ def fix_page(page, fixer, *, threshold):
     if fixer.total_score < threshold:
         return
     summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]]. '
-        + f'Total of {fixer.total_score} lines deleted or modified.')
+        + f'({fixer.total_score} lines affected)')
     try:
         page.save(summary=summary,
                   minor=True,

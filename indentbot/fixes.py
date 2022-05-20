@@ -7,7 +7,7 @@ import wikitextparser as wtp
 from datetime import datetime
 
 from pagequeue import SITE
-from patterns import (COMMENT_RE, NON_BREAKING_TAGS, PARSER_EXTENSION_TAGS)
+from patterns import *
 
 class CombinedFix:
     def __init__(self, *,
@@ -107,15 +107,15 @@ class CombinedFix:
         i = len(lines) - 1
         while i > 0:
             txt, lvl = indent_text_lvl(lines[i])
-            if lvl:
-                for i in range(i - 1, -1, -1):
-                    m = re.match(r'([:*#]+) *\n\Z', lines[i])
-                    if not m or len(m[1]) >= lvl:
-                        break
-                    lines[i] = m[1] + txt[len(m[1]):] + '\n'
-                    score += 1
-            else:
+            if lvl == 0:
                 i -= 1
+                continue
+            for i in range(i - 1, -1, -1):
+                m = re.match(fr'([:*#]+){SPACE_OR_COMMENT_OR_CATEGORY_RE}*\n\Z', lines[i])
+                if not m or len(m[1]) >= lvl:
+                    break
+                lines[i] = txt + lines[i][len(m[1]):]
+                score += 1
         return [x for x in lines if x], score
 
     def _match_indent(self, prev_indent, indent2):
@@ -252,18 +252,15 @@ def line_partition(text):
             open_bracket = text.rindex('<', 0, j)
             bad_indices.update(find_all(text, '\n', open_bracket, j))
 
-    # A line consisting only of 1+ comments and optionally extra spaces
+    # A line consisting only of spaces and 1+ comments is basically invisible
     # should be treated as part of the preceding line.
-    # So we don't split on the '\n' immediately preceding such a line.
     for m in re.finditer(
-            fr'\n *{COMMENT_RE}( |{COMMENT_RE})*(?=\n)',
-            text, flags=re.S):
+            fr'\n *{COMMENT_RE}{SPACE_OR_COMMENT_RE}*(?=\n)', text):
         bad_indices.update(find_all(text, '\n', *m.span()))
 
-    # whitespace followed by a Category link doesn't break lines
-    for m in re.finditer(
-            fr'(\s|{COMMENT_RE})+\[\[Category:',
-            text, flags=re.I):
+    # Whitespace/comments followed by a Category link do not break lists
+    # and are basically invisible.
+    for m in re.finditer(fr'(?:\s|{COMMENT_RE})+{CATEGORY_RE}', text):
         bad_indices.update(find_all(text, '\n', *m.span()))
 
     # Now partition into lines.
@@ -282,6 +279,19 @@ def line_partition(text):
 ################################################################################
 # Helper functions
 ################################################################################
+def indent_text(line):
+    return re.match(r'[:*#]*', line)[0]
+
+def indent_lvl(line):
+    return len(indent_text(line))
+
+def indent_text_lvl(line):
+    x = indent_text(line)
+    return x, len(x)
+
+def is_blank_line(line):
+    return bool(re.fullmatch(r'\s*', line))
+
 def find_all(s, sub, start=0, end=None):
     """
     Yields start indices of non-overlapping instances of the substring sub in s.
@@ -295,19 +305,6 @@ def find_all(s, sub, start=0, end=None):
             return
         yield start
         start += len(sub)
-
-def is_blank_line(line):
-    return bool(re.fullmatch(r'\s+', line))
-
-def indent_text(line):
-    return re.match(r'[:*#]*', line)[0]
-
-def indent_lvl(line):
-    return len(indent_text(line))
-
-def indent_text_lvl(line):
-    x = indent_text(line)
-    return x, len(x)
 
 def visual_lvl(line):
     x = indent_text(line)
@@ -330,8 +327,6 @@ def has_list_breaking_newline(line):
     actually do break lists so that we don't edit stuff that shouldn't be
     edited, e.g. <pre></pre>. This function lets us detect such line breaks.
     """
-    # pat = '\n( |' + COMMENT_RE + r')*(\{[{|]|<[^!]|\[\[(?:File|Image):)'
-    # return bool(re.search(pat, line))
     wt = wtp.parse(line)
     for x in wt.get_tags():
         # if breaking tag with '\n' in contents...

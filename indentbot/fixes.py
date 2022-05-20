@@ -83,6 +83,8 @@ class CombinedFix:
             if gaplen == 0:
                 score += new_indent != txt_j
             elif self._removable_gap(prev_indent, txt_j, new_indent, gaplen):
+                if gaplen == 1:
+                    new_lines += [f'{new_indent}\n'] * gaplen
                 score += gaplen + (new_indent != txt_j)
             else:
                 new_lines += lines[i : j]
@@ -203,10 +205,7 @@ class CombinedFix:
             a = b
         return False
 
-################################################################################
-# Line partitioning functions.
-# Not every newline should be used to delimit a line for lists.
-################################################################################
+
 def line_partition(text):
     """
     Partition wikitext into lines, respecting how newlines interact with lists.
@@ -278,6 +277,7 @@ def line_partition(text):
     # If text does have a newline at the end, this just appends an empty string.
     lines.append(text[prev:])
     return lines
+
 
 ################################################################################
 # Helper functions

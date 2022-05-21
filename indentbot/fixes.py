@@ -9,10 +9,16 @@ from datetime import datetime
 from pagequeue import SITE
 from patterns import *
 
+
 class CombinedFix:
-    def __init__(self, *,
-            min_closing_lvl=2, max_gap=1, allow_reset=False,
-            keep_last_asterisk=False):
+    def __init__(
+        self,
+        *,
+        min_closing_lvl=2,
+        max_gap=1,
+        allow_reset=False,
+        keep_last_asterisk=False,
+    ):
         """
         With the most liberal settings, essentially all gaps
         between two indented lines will be removed. The parameters serve
@@ -44,7 +50,7 @@ class CombinedFix:
         an indent always being preserved.
         """
         if min_closing_lvl < 1:
-            raise ValueError('min_closing_lvl should be at least 1')
+            raise ValueError("min_closing_lvl should be at least 1")
         self.min_closing_lvl = min_closing_lvl
         self.max_gap = max_gap
         self.allow_reset = bool(allow_reset)
@@ -59,7 +65,7 @@ class CombinedFix:
         new_lines = [lines[0]]
         prev_indent = indent_text(lines[0])
         if 0 in table_indices or has_list_breaking_newline(lines[0]):
-            prev_indent = ''
+            prev_indent = ""
         i, n = 1, len(lines)
         while i < n:
             # Find next nonblank line.
@@ -84,18 +90,18 @@ class CombinedFix:
                 score += new_indent != txt_j
             elif self._removable_gap(prev_indent, txt_j, new_indent, gaplen):
                 if gaplen == 1:
-                    new_lines += [f'{new_indent}\n'] * gaplen
+                    new_lines += [f"{new_indent}\n"] * gaplen
                 score += gaplen + (new_indent != txt_j)
             else:
-                new_lines += lines[i : j]
+                new_lines += lines[i:j]
                 new_indent = txt_j
             new_lines.append(new_indent + line[lvl_j:])
 
             prev_indent = new_indent
             if j in table_indices or has_list_breaking_newline(line):
-                prev_indent = ''
+                prev_indent = ""
             i = j + 1
-        return ''.join(new_lines), score
+        return "".join(new_lines), score
 
     def _adjust_indented_and_blank(self, lines):
         """
@@ -111,10 +117,11 @@ class CombinedFix:
                 i -= 1
                 continue
             for i in range(i - 1, -1, -1):
-                m = re.match(fr'([:*#]+){SPACE_OR_COMMENT_OR_CATEGORY_RE}*\n\Z', lines[i])
+                p = rf"([:*#]+){SPACE_OR_COMMENT_OR_CATEGORY_RE}*\n"
+                m = re.fullmatch(p, lines[i])
                 if not m or len(m[1]) >= lvl:
                     break
-                lines[i] = txt + lines[i][len(m[1]):]
+                lines[i] = txt + lines[i][len(m[1]) :]
                 score += 1
         return [x for x in lines if x], score
 
@@ -127,23 +134,26 @@ class CombinedFix:
 
         The final indentation character is never altered.
         """
-        new_indent = ''
+        new_indent = ""
         p1, p2 = 0, 0
         lvl = len(indent2)
         minlvl = min(len(prev_indent), lvl)
-        last_ast_index = indent2.rfind('*')
+        last_ast_index = indent2.rfind("*")
         while p1 < minlvl and p2 < lvl:
             c1, c2 = prev_indent[p1], indent2[p2]
             if self.keep_last_asterisk and p2 == last_ast_index:
-                new_indent += '*'
-            elif c2 == '#':
+                new_indent += "*"
+            elif c2 == "#":
                 new_indent += c2
-            elif c1 == '#':
-                if (p2 < lvl - 2 and indent2[p2+1] != '#' and not
-                    (self.keep_last_asterisk and p2 + 1 == last_ast_index)):
+            elif c1 == "#":
+                if (
+                    p2 < lvl - 2
+                    and indent2[p2 + 1] != "#"
+                    and not (self.keep_last_asterisk and p2 + 1 == last_ast_index)
+                ):
                     # can replace next two chars with '#' while keeping
                     # same indent level
-                    new_indent += '#'
+                    new_indent += "#"
                     p2 += 1
                 else:
                     new_indent += c2
@@ -164,7 +174,7 @@ class CombinedFix:
         Returns True if and only if the gap should be removed.
         """
         if gaplen < 1:
-            raise ValueError('gaplen should be >= 1')
+            raise ValueError("gaplen should be >= 1")
         len1, len2 = len(opening), len(newclose)
         # Only consider gaps between indented lines.
         if not (len1 and len2):
@@ -178,7 +188,7 @@ class CombinedFix:
         if self.allow_reset and len2 == 1 < len1:
             return False
         # Prevent possible numbering change.
-        if one_count('', oldclose) != one_count(opening, newclose):
+        if one_count("", oldclose) != one_count(opening, newclose):
             return False
         return True
 
@@ -192,8 +202,8 @@ class CombinedFix:
             if indent_text(line):
                 wt = wtp.parse(line)
                 for x in wt.wikilinks:
-                    s = str(x).lstrip('[').rstrip(']')
-                    if s.endswith('\n') or len(line_partition(s)) > 1:
+                    s = str(x).lstrip("[").rstrip("]")
+                    if s.endswith("\n") or len(line_partition(s)) > 1:
                         return True
         # Prevent possible numbering change.
         a = indent_text(lines[0])
@@ -226,48 +236,47 @@ def line_partition(text):
     bad_indices = set()
     for x in wt.tables + wt.templates + wt.comments:
         i, j = x.span
-        bad_indices.update(find_all(text, '\n', i, j))
+        bad_indices.update(find_all(text, "\n", i, j))
 
     for x in wt.wikilinks:
         if x.text is None:
             continue
         i, j = x.span
-        bad_indices.update(find_all(text, '\n', text.index('|', i), j))
+        bad_indices.update(find_all(text, "\n", text.index("|", i), j))
 
     for x in wt.parser_functions:
         i, j = x.span
-        k = text.find(':', i)
+        k = text.find(":", i)
         if k != -1:
             i = k
-        bad_indices.update(find_all(text, '\n', i, j))
+        bad_indices.update(find_all(text, "\n", i, j))
 
     for x in wt.get_tags():
         i, j = x.span
         if x.name in PARSER_EXTENSION_TAGS:
-            bad_indices.update(find_all(text, '\n', i, j))
+            bad_indices.update(find_all(text, "\n", i, j))
         else:
-            close_bracket = text.index('>', i)
-            bad_indices.update(find_all(text, '\n', i, close_bracket))
+            close_bracket = text.index(">", i)
+            bad_indices.update(find_all(text, "\n", i, close_bracket))
 
-            open_bracket = text.rindex('<', 0, j)
-            bad_indices.update(find_all(text, '\n', open_bracket, j))
+            open_bracket = text.rindex("<", 0, j)
+            bad_indices.update(find_all(text, "\n", open_bracket, j))
 
     # A line consisting only of spaces and 1+ comments is basically invisible
     # should be treated as part of the preceding line.
-    for m in re.finditer(
-            fr'\n *{COMMENT_RE}{SPACE_OR_COMMENT_RE}*(?=\n)', text):
-        bad_indices.update(find_all(text, '\n', *m.span()))
+    for m in re.finditer(rf"\n *{COMMENT_RE}{SPACE_OR_COMMENT_RE}*(?=\n)", text):
+        bad_indices.update(find_all(text, "\n", *m.span()))
 
     # Whitespace/comments followed by a Category link do not break lists
     # and are basically invisible.
-    for m in re.finditer(fr'(?:\s|{COMMENT_RE})+{CATEGORY_RE}', text):
-        bad_indices.update(find_all(text, '\n', *m.span()))
+    for m in re.finditer(rf"(?:\s|{COMMENT_RE})+{CATEGORY_RE}", text):
+        bad_indices.update(find_all(text, "\n", *m.span()))
 
     # Now partition into lines.
     prev, lines = 0, []
-    for i in find_all(text, '\n'):
+    for i in find_all(text, "\n"):
         if i not in bad_indices:
-            lines.append(text[prev : i+1])
+            lines.append(text[prev : i + 1])
             prev = i + 1
     # Wikipedia strips newlines from the end, so we must explicitly
     # append the final line.
@@ -280,17 +289,21 @@ def line_partition(text):
 # Helper functions
 ################################################################################
 def indent_text(line):
-    return re.match(r'[:*#]*', line)[0]
+    return re.match(r"[:*#]*", line)[0]
+
 
 def indent_lvl(line):
     return len(indent_text(line))
+
 
 def indent_text_lvl(line):
     x = indent_text(line)
     return x, len(x)
 
+
 def is_blank_line(line):
-    return bool(re.fullmatch(r'\s*', line))
+    return bool(re.fullmatch(r"\s*", line))
+
 
 def find_all(s, sub, start=0, end=None):
     """
@@ -306,10 +319,12 @@ def find_all(s, sub, start=0, end=None):
         yield start
         start += len(sub)
 
+
 def visual_lvl(line):
     x = indent_text(line)
     # '#' counts for two lvls visually
-    return len(x) + x.count('#')
+    return len(x) + x.count("#")
+
 
 def one_count(a, b):
     """
@@ -318,7 +333,8 @@ def one_count(a, b):
     """
     lena, lenb = len(a), len(b)
     j = next((i for i in range(lenb) if i >= lena or a[i] != b[i]), lenb)
-    return b[j:].count('#')
+    return b[j:].count("#")
+
 
 def has_list_breaking_newline(line):
     """
@@ -332,9 +348,10 @@ def has_list_breaking_newline(line):
         # if breaking tag with '\n' in contents...
         if x.name not in PARSER_EXTENSION_TAGS - NON_BREAKING_TAGS:
             continue
-        if '\n' in x.contents:
+        if "\n" in x.contents:
             return True
     return False
+
 
 def expand_list(l, title=None):
     """
@@ -343,10 +360,11 @@ def expand_list(l, title=None):
     """
     if not l:
         return []
-    DELIMITER = f'INDENTBOTDELIMITERat{datetime.utcnow()}'
+    DELIMITER = f"INDENTBOTDELIMITERat{datetime.utcnow()}"
     z = DELIMITER.join(l)
     z = SITE.expand_text(z, title=title, includecomments=False)
     return z.split(DELIMITER)
+
 
 def begins_with_table(lines):
     """
@@ -364,11 +382,10 @@ def begins_with_table(lines):
             expand_indices.append(i)
             expand_lines.append(line[lvl:])
     for ind, eline in zip(expand_indices, expand_list(expand_lines)):
-        if eline.lstrip().startswith('{|'):
+        if eline.lstrip().startswith("{|"):
             result.add(ind)
     return result
 
 
 if __name__ == "__main__":
     pass
-

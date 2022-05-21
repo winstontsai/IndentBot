@@ -20,20 +20,21 @@ from pywikibot.pagegenerators import PreloadingGenerator
 import patterns as pat
 
 ################################################################################
-logger = logging.getLogger('indentbot_logger')
-SITE = Site('en', 'wikipedia')
-SITE.login(user='IndentBot')
+logger = logging.getLogger("indentbot_logger")
+SITE = Site("en", "wikipedia")
+SITE.login(user="IndentBot")
 
 # Certain users are allowed to stop and resume the bot.
 ON_PAUSE = False
 ################################################################################
+
 
 class PageQueue:
     def __init__(self):
         self._pq = []
         self._len = 0
         self._entry_finder = {}
-        self._REMOVED = '<removed-task>'
+        self._REMOVED = "<removed-task>"
         self._counter = itertools.count(start=1)
 
     def clear(self):
@@ -71,7 +72,7 @@ class PageQueue:
                 del self._entry_finder[page.title(with_ns=True)]
                 self._len -= 1
                 return page
-        raise KeyError('pop from an empty PageQueue')
+        raise KeyError("pop from an empty PageQueue")
 
     def pop_up_to(self, priority):
         while self._pq:
@@ -97,7 +98,7 @@ def recent_changes_gen(start, end):
     Yield recent changes between the timestamps start and end, inclusive,
     with the potential to be edited by IndentBot.
     """
-    logger.info(f'Retrieving edits from {start} to {end}.')
+    logger.info(f"Retrieving edits from {start} to {end}.")
     # 0   (Main/Article)  Talk            1
     # 2   User            User talk       3
     # 4   Wikipedia       Wikipedia talk  5
@@ -114,12 +115,18 @@ def recent_changes_gen(start, end):
     OTHER_SPACES = (4, 10)
     NAMESPACES = TALK_SPACES + OTHER_SPACES
     for change in SITE.recentchanges(
-            start=start, end=end, reverse=True,
-            changetype='edit', namespaces=NAMESPACES,
-            minor=False, bot=False, redirect=False):
-        if change['newlen'] - change['oldlen'] < 100:
+        start=start,
+        end=end,
+        reverse=True,
+        changetype="edit",
+        namespaces=NAMESPACES,
+        minor=False,
+        bot=False,
+        redirect=False,
+    ):
+        if change["newlen"] - change["oldlen"] < 100:
             continue
-        if should_not_edit(change['title']):
+        if should_not_edit(change["title"]):
             continue
         yield change
 
@@ -131,19 +138,19 @@ def potential_page_gen(changes):
 
     We use a PreloadingGenerator to reduce the number of API calls.
     """
-    pdict = {} # map titles to a set of timestamps
+    pdict = {}  # map titles to a set of timestamps
     for c in changes:
-        pdict.setdefault(c['title'], set()).add(c['timestamp'])
+        pdict.setdefault(c["title"], set()).add(c["timestamp"])
     for page in PreloadingGenerator(Page(SITE, title) for title in pdict):
         title, text = page.title(with_ns=True), page.text
         # User/User talk pages must explicitly allow IndentBot
-        if title.startswith('User') and not has_bot_allow_template(text):
+        if title.startswith("User") and not has_bot_allow_template(text):
             continue
         # In the Template namespace, only DYK nominations are allowed
-        if title.startswith('Template:') and not valid_template_page(title):
+        if title.startswith("Template:") and not valid_template_page(title):
             continue
         # Wikipedia namespace pages must have at least 5 signatures
-        if title.startswith('Wikipedia:') and not has_n_sigs(5, text):
+        if title.startswith("Wikipedia:") and not has_n_sigs(5, text):
             continue
         # Must have a timestamp matching the edit time
         if not any(has_sig_with_timestamp(ts, text) for ts in pdict[title]):
@@ -167,7 +174,7 @@ def continuous_page_gen(chunk, delay):
     last_load = old_time
     yield from pq.pop_up_to(cutoff)
     while True:
-        time.sleep(max(0, 60*chunk - time.perf_counter() + tstart))
+        time.sleep(max(0, 60 * chunk - time.perf_counter() + tstart))
         tstart = time.perf_counter()
         current_time = SITE.server_time()
         cutoff = current_time - delay
@@ -196,19 +203,19 @@ def is_sandbox(title):
     Return True if the title looks like it belongs to a sandbox.
     """
     SANDBOXES = (
-        'Wikipedia:Sandbox',
-        'Wikipedia talk:Sandbox',
-        'Wikipedia:Articles for creation/AFC sandbox',
-        'Wikipedia:AutoWikiBrowser/Sandbox',
-        'User:Sandbox',
-        'User talk:Sandbox',
-        'User talk:Sandbox for user warnings',
-        'User talk:192.0.2.16',
-        'User talk:2001:DB8:10:0:0:0:0:1'
+        "Wikipedia:Sandbox",
+        "Wikipedia talk:Sandbox",
+        "Wikipedia:Articles for creation/AFC sandbox",
+        "Wikipedia:AutoWikiBrowser/Sandbox",
+        "User:Sandbox",
+        "User talk:Sandbox",
+        "User talk:Sandbox for user warnings",
+        "User talk:192.0.2.16",
+        "User talk:2001:DB8:10:0:0:0:0:1",
     )
     if title in SANDBOXES:
         return True
-    return bool(re.search(r'/sandbox(?: ?\d+)?(?:/|\Z)', title, flags=re.I))
+    return bool(re.search(r"/sandbox(?: ?\d+)?(?:/|\Z)", title, flags=re.I))
 
 
 def valid_template_page(title):
@@ -216,7 +223,7 @@ def valid_template_page(title):
     Only edit certain template pages.
     An "opt-in" for the template namespace.
     """
-    return title.startswith('Template:Did you know nominations/')
+    return title.startswith("Template:Did you know nominations/")
 
 
 def should_not_edit(title):
@@ -225,11 +232,13 @@ def should_not_edit(title):
     """
     if is_sandbox(title):
         return True
-    if title.startswith('Template:') and not valid_template_page(title):
+    if title.startswith("Template:") and not valid_template_page(title):
         return True
-    BAD_TITLE_PREFIXES = frozenset([
-        'Wikipedia:Arbitration/Requests/',
-    ])
+    BAD_TITLE_PREFIXES = frozenset(
+        [
+            "Wikipedia:Arbitration/Requests/",
+        ]
+    )
     if any(title.startswith(x) for x in BAD_TITLE_PREFIXES):
         return True
     return False
@@ -257,13 +266,13 @@ def has_sig_with_timestamp(ts, text):
     Example signature:
     [[User:ASDF|FDSA]] ([[User talk:ASDF|talk]]) 01:24, 22 March 2022 (UTC)
     """
-    dt = datetime.fromisoformat(ts.rstrip('Z'))
+    dt = datetime.fromisoformat(ts.rstrip("Z"))
     mm = dt.strftime("%M")
     hh = dt.strftime("%H")
     day = dt.day
     mon = dt.strftime("%B")
     year = dt.strftime("%Y")
-    p = fr'\[\[[Uu]ser(?: talk)?:[^\n]+?{hh}:{mm}, {day} {mon} {year} \(UTC\)'
+    p = rf"\[\[[Uu]ser(?: talk)?:[^\n]+?{hh}:{mm}, {day} {mon} {year} \(UTC\)"
     return re.search(p, text)
 
 
@@ -279,11 +288,11 @@ def has_bot_allow_template(text):
         except IndexError:
             # normal_name(capitalize=True) cannot handle empty edge case
             continue
-        if n not in ('Bots', 'Nobots', 'NOBOTS', 'Botsdeny', 'Bots deny'):
+        if n not in ("Bots", "Nobots", "NOBOTS", "Botsdeny", "Bots deny"):
             continue
-        if allowed := template.get_arg('allow'):
-            for x in allowed.value.split(','):
-                if x.strip().lower() == 'indentbot':
+        if allowed := template.get_arg("allow"):
+            for x in allowed.value.split(","):
+                if x.strip().lower() == "indentbot":
                     return True
     return False
 
@@ -296,27 +305,29 @@ def check_pause_or_resume(start, end):
     """
     global ON_PAUSE
     original_status = ON_PAUSE
-    page = Page(SITE, 'User talk:IndentBot')
+    page = Page(SITE, "User talk:IndentBot")
     for rev in page.revisions(starttime=start, endtime=end, reverse=True):
-        user   = rev['user']
+        user = rev["user"]
         groups = User(SITE, user).groups()
-        cmt    = rev.get('comment', '')
-        revid  = rev.revid
-        ts     = rev.timestamp.isoformat()
-        if user in pat.MAINTAINERS or 'sysop' in groups:
+        cmt = rev.get("comment", "")
+        revid = rev.revid
+        ts = rev.timestamp.isoformat()
+        if user in pat.MAINTAINERS or "sysop" in groups:
             can_stop, can_resume = True, True
-        elif 'autoconfirmed' in groups:
+        elif "autoconfirmed" in groups:
             can_stop, can_resume = True, False
         else:
             continue
-        msg = ("{} by {}.\n"
-               "    Revid     = {}\n"
-               "    Timestamp = {}\n"
-               "    Comment   = {}")
-        if cmt.endswith('PAUSE') and not ON_PAUSE and can_stop:
+        msg = (
+            "{} by {}.\n"
+            "    Revid     = {}\n"
+            "    Timestamp = {}\n"
+            "    Comment   = {}"
+        )
+        if cmt.endswith("PAUSE") and not ON_PAUSE and can_stop:
             ON_PAUSE = True
             logger.warning(msg.format("Paused", user, revid, ts, cmt))
-        elif cmt.endswith('RESUME') and ON_PAUSE and can_resume:
+        elif cmt.endswith("RESUME") and ON_PAUSE and can_resume:
             ON_PAUSE = False
             logger.warning(msg.format("Resumed", user, revid, ts, cmt))
         if original_status != ON_PAUSE:
@@ -325,4 +336,3 @@ def check_pause_or_resume(start, end):
 
 if __name__ == "__main__":
     pass
-

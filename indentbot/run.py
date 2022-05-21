@@ -16,41 +16,73 @@ from textfixer import TextFixer
 
 ################################################################################
 
+
 def get_args():
     parser = argparse.ArgumentParser(
-        description=('Bot that helps maintain consistent and correct '
-            'indentation in discussion pages on Wikipedia.'))
+        description=(
+            "Bot that helps maintain consistent and correct "
+            "indentation in discussion pages on Wikipedia."
+        )
+    )
 
-    parser.add_argument('chunk', type=int,
-        help='minimum minutes between checkpoints')
+    parser.add_argument("chunk", type=int, help="minimum minutes between checkpoints")
 
-    parser.add_argument('delay', type=int,
-        help='minimum minutes of delay before fixing a page')
+    parser.add_argument(
+        "delay", type=int, help="minimum minutes of delay before fixing a page"
+    )
 
-    parser.add_argument('-l', '--logfile',
-        help='log filename (default: $HOME/logs/indentbot.log)')
+    parser.add_argument(
+        "-l", "--logfile", help="log filename (default: $HOME/logs/indentbot.log)"
+    )
 
-    parser.add_argument('-t', '--total', type=int, default=float('inf'),
-        help='maximum number of edits to make (default: unlimited)')
+    parser.add_argument(
+        "-t",
+        "--total",
+        type=int,
+        default=float("inf"),
+        help="maximum number of edits to make (default: unlimited)",
+    )
 
-    parser.add_argument('--threshold', type=int, default=1,
-        help='minimum total error score for an edit to be made (default: 1)')
+    parser.add_argument(
+        "--threshold",
+        type=int,
+        default=1,
+        help="minimum total error score for an edit to be made (default: 1)",
+    )
 
-    parser.add_argument('-v', '--verbose', action='store_true',
-        help='print the {{Diff2}} template for successful edits')
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="print the {{Diff2}} template for successful edits",
+    )
 
     # Keyword options for the fixes.
     # gap
-    parser.add_argument('--min_closing_lvl', type=int, default=2,
-        help='minimum level of the closing line of a gap to be removed (default: 2)')
-    parser.add_argument('--max_gap', type=int, default=1,
-        help='maximum length of a gap to be removed (default: 1)')
-    parser.add_argument('--allow_reset', action='store_true',
-        help='allow gaps between a line with level>1 and a line with lvl=1')
+    parser.add_argument(
+        "--min_closing_lvl",
+        type=int,
+        default=2,
+        help="minimum level of the closing line of a gap to be removed (default: 2)",
+    )
+    parser.add_argument(
+        "--max_gap",
+        type=int,
+        default=1,
+        help="maximum length of a gap to be removed (default: 1)",
+    )
+    parser.add_argument(
+        "--allow_reset",
+        action="store_true",
+        help="allow gaps between a line with level>1 and a line with lvl=1",
+    )
 
     # style
-    parser.add_argument('--keep_last_asterisk', action='store_true',
-        help='always keeps the rightmost asterisk')
+    parser.add_argument(
+        "--keep_last_asterisk",
+        action="store_true",
+        help="always keeps the rightmost asterisk",
+    )
     return parser.parse_args()
 
 
@@ -60,15 +92,15 @@ def set_up_logging(logfile):
     $HOME/logs/indentbot.log.
     The directory $HOME/logs will be created if it does not exist.
     """
-    logging.getLogger('pywiki').setLevel(logging.WARNING)
-    logger = logging.getLogger('indentbot_logger')
+    logging.getLogger("pywiki").setLevel(logging.WARNING)
+    logger = logging.getLogger("indentbot_logger")
     if logfile is None:
-        path = Path.home() / 'logs'
-        path.mkdir(exist_ok = True)
-        path = path / 'indentbot.log'
+        path = Path.home() / "logs"
+        path.mkdir(exist_ok=True)
+        path = path / "indentbot.log"
         logfile = str(path)
-    file_handler = logging.FileHandler(filename=logfile, mode='a')
-    formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+    file_handler = logging.FileHandler(filename=logfile, mode="a")
+    formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.INFO)
     logger.addHandler(file_handler)
@@ -84,42 +116,36 @@ def fix_page(page, fixer, *, threshold):
     """
     title, title_link = page.title(with_ns=True), page.title(as_link=True)
     # Only edit User/User talk pages if IndentBot is explicitly allowed
-    if title.startswith('User') and not has_bot_allow_template(page.text):
+    if title.startswith("User") and not has_bot_allow_template(page.text):
         return
     page.text = fixer.fix(page.text)[0]
     if fixer.total_score < threshold:
         return
-    summary = ('Adjusted indent/list markup per [[MOS:INDENTMIX]]. '
-        + f'({fixer.total_score} lines affected)')
+    summary = (
+        "Adjusted indent/list markup per [[MOS:INDENTMIX]]. "
+        f"({fixer.total_score} lines affected)"
+    )
     try:
-        page.save(summary=summary,
-                  minor=True,
-                  botflag=True,
-                  nocreate=True,
-                  quiet=True)
+        page.save(summary=summary, minor=True, botflag=True, nocreate=True, quiet=True)
     except EditConflictError:
-        logger.warning(f'Edit conflict for {title_link}.')
+        logger.warning(f"Edit conflict for {title_link}.")
     except LockedPageError:
-        logger.warning(f'{title_link} is locked.')
+        logger.warning(f"{title_link} is locked.")
     except AbuseFilterDisallowedError:
-        logger.warning(
-            f'Edit to {title_link} prevented by abuse filter.')
+        logger.warning(f"Edit to {title_link} prevented by abuse filter.")
     except SpamblacklistError:
-        logging.warning(
-            f'Edit to {title_link} prevented by spam blacklist.')
+        logging.warning(f"Edit to {title_link} prevented by spam blacklist.")
     except OtherPageSaveError as err:
-        if err.args.startswith('Editing restricted by {{bots}}'):
-            logger.warning(
-                f'Edit to {title_link} prevented by {{{{bots}}}}.')
+        if err.args.startswith("Editing restricted by {{bots}}"):
+            logger.warning(f"Edit to {title_link} prevented by {{{{bots}}}}.")
         else:
-            logger.exception(
-                f'OtherPageSaveError for {title_link}.')
+            logger.exception(f"OtherPageSaveError for {title_link}.")
             raise
     except PageSaveRelatedError:
-        logger.exception(f'PageSaveRelatedError for {title_link}.')
+        logger.exception(f"PageSaveRelatedError for {title_link}.")
         raise
     except Exception:
-        logger.exception(f'Error when saving {title_link}.')
+        logger.exception(f"Error when saving {title_link}.")
         raise
     else:
         return pat.diff_template(page)
@@ -138,18 +164,22 @@ def mainloop(args):
     chunk, delay, limit = args.chunk, args.delay, args.total
     threshold = args.threshold
     verbose = args.verbose
-    logger.info(('Starting run. '
-        f'(chunk={chunk}, delay={delay}, limit={limit}, threshold={threshold})'))
+    logger.info(
+        (
+            "Starting run. "
+            f"(chunk={chunk}, delay={delay}, limit={limit}, threshold={threshold})"
+        )
+    )
     t1 = time.perf_counter()
     count = 0
     FIXER = TextFixer(
-                CombinedFix(
-                    keep_last_asterisk=args.keep_last_asterisk,
-                    allow_reset=args.allow_reset,
-                    min_closing_lvl=args.min_closing_lvl,
-                    max_gap=args.max_gap
-                )
-            )
+        CombinedFix(
+            keep_last_asterisk=args.keep_last_asterisk,
+            allow_reset=args.allow_reset,
+            min_closing_lvl=args.min_closing_lvl,
+            max_gap=args.max_gap,
+        )
+    )
     for p in continuous_page_gen(chunk, delay):
         diff = fix_page(p, FIXER, threshold=threshold)
         if diff:
@@ -157,30 +187,29 @@ def mainloop(args):
             if verbose:
                 print(diff)
         if count >= limit:
-            logger.info(f'Limit ({limit}) reached.')
+            logger.info(f"Limit ({limit}) reached.")
             break
     t2 = time.perf_counter()
-    logger.info(f'Ending run. Made {count} edits in {round(t2-t1, 2)} seconds.')
+    logger.info(f"Ending run. Made {count} edits in {round(t2-t1, 2)} seconds.")
 
 
 def run():
     args = get_args()
     set_up_logging(logfile=args.logfile)
     if pat.get_status_page() != pat.INACTIVE:
-        logger.error(f'Cannot start run due to invalid status page.')
+        logger.error(f"Cannot start run due to invalid status page.")
         return 1
     pat.set_status_page(pat.ACTIVE)
     try:
         mainloop(args)
     except BaseException as e:
-        logger.error(f'Ending run due to {type(e).__name__}.')
+        logger.error(f"Ending run due to {type(e).__name__}.")
         raise
     finally:
         pat.set_status_page(pat.INACTIVE)
     return 0
 
 
-if __name__ == '__main__':
-    logger = logging.getLogger('indentbot_logger')
+if __name__ == "__main__":
+    logger = logging.getLogger("indentbot_logger")
     sys.exit(run())
-

@@ -20,7 +20,7 @@ class TextFixer:
         longer changes.
         """
         if not fixes:
-            raise ValueError('No fixes provided')
+            raise ValueError("No fixes provided")
         # Convert fixes to a tuple.
         # If fixes is not iterable, convert it to 1-tuple.
         try:
@@ -28,7 +28,7 @@ class TextFixer:
         except TypeError:
             fixes = tuple([fixes])
         if any(not callable(f) for f in fixes):
-            raise TypeError('All fixes must be callable')
+            raise TypeError("All fixes must be callable")
         self._fixes = fixes
         self._fix_count = 0
         if onepass is None:
